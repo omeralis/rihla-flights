@@ -3,5 +3,8 @@
   "framework": null,
   "buildCommand": "",
   "outputDirectory": "dist",
-  "cleanUrls": false
+  "cleanUrls": false,
+  "functions": {
+    "api/sources.js": { "maxDuration": 20 }
+  }
 }

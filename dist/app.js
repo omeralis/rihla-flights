@@ -21,6 +21,11 @@ if(form){
  document.getElementById('swap').addEventListener('click',()=>{const old=from.value;from.value=to.value;to.value=old});
  form.addEventListener('submit',e=>{let message='';if(from.value===to.value)message='اختر مدينة وصول مختلفة عن مدينة المغادرة.';else if(!form.querySelector('[name=airline]:checked'))message='اختر شركة طيران واحدة على الأقل.';else if(!backDate.disabled&&backDate.value<date.value)message='تاريخ العودة يجب أن يكون بعد تاريخ المغادرة أو في اليوم نفسه.';const error=document.getElementById('form-error');error.hidden=!message;error.textContent=message;if(message)e.preventDefault()});
 }
+const sources={
+ tarco:{name:'تاركو',code:'TC',url:'https://fo-emea.ttinteractive.com/zenith/frontoffice/tarcoair/en-GB/BookingEngine/SearchFlights'},
+ badr:{name:'بدر',code:'J4',url:'https://fo-emea.ttinteractive.com/Zenith/FrontOffice/badrairlines/en-GB/BookingEngine/SearchFlights'},
+ sudanair:{name:'سودانير',code:'SD',url:'https://emea.ttinteractive.com/Zenith/FrontOffice/SudanAirways/en-GB/BookingEngine/SearchFlights'}
+};
 const list=document.getElementById('flight-list');
 if(list){
  const from=cities[params.get('from')]?params.get('from'):'PZU',to=cities[params.get('to')]?params.get('to'):'CAI';
@@ -29,12 +34,46 @@ if(list){
  document.getElementById('route-title').textContent=`${cities[from]} ← ${cities[to]}`;
  document.getElementById('search-summary').textContent=`${dateText(date)}${round?` · العودة: ${dateText(returnDate)}`:''} · ${passengers} ${passengers===1?'مسافر':'مسافرين'} · ${round?'ذهاب وعودة':'ذهاب فقط'} · اقتصادية`;
  document.getElementById('edit-link').href=`index.html?${params.toString()}`;
- const chosen=params.getAll('airline');document.querySelectorAll('.air-filter').forEach(e=>{e.checked=chosen.length?chosen.includes(e.value):true;e.addEventListener('change',render)});
- const flights=[{airline:'tarco',number:'412',departure:'07:30',arrival:'10:10',duration:'ساعتان و40 دقيقة',price:215},{airline:'badr',number:'620',departure:'10:15',arrival:'13:00',duration:'ساعتان و45 دقيقة',price:235},{airline:'sudanair',number:'204',departure:'14:00',arrival:'16:50',duration:'ساعتان و50 دقيقة',price:250},{airline:'tarco',number:'416',departure:'17:30',arrival:'20:10',duration:'ساعتان و40 دقيقة',price:265},{airline:'badr',number:'626',departure:'20:00',arrival:'22:45',duration:'ساعتان و45 دقيقة',price:280}];
- const money=n=>n.toLocaleString('en-US');
- function render(){const selected=[...document.querySelectorAll('.air-filter:checked')].map(e=>e.value),time=document.getElementById('time-filter').value,sort=document.getElementById('sort').value;const results=from===to?[]:flights.filter(f=>selected.includes(f.airline)&&(time==='all'||(time==='morning'?Number(f.departure.slice(0,2))<12:Number(f.departure.slice(0,2))>=12))).sort((a,b)=>sort==='price'?a.price-b.price:a.departure.localeCompare(b.departure));document.getElementById('result-count').textContent=`${results.length} رحلات تجريبية`;list.replaceChildren();
- if(!results.length){list.innerHTML='<div class="empty-state"><span style="font-size:40px">⌕</span><h2>لا توجد نتائج تطابق اختيارك</h2><p>جرّب تغيير شركات الطيران أو وقت المغادرة.</p><a class="back" href="index.html">ابدأ بحثًا جديدًا ←</a></div>';return}
- results.forEach((f,i)=>{const a=airlines[f.airline],price=f.price*passengers*(round?2:1);const card=document.createElement('article');card.className='flight-card';card.innerHTML=`<div class="flight-top"><div class="airline-name" style="color:${a.color}"><span class="airline-mark">${a.code}</span>${a.name}</div><span>نموذج رحلة · ${a.code} ${f.number}</span></div><div class="flight-body"><div class="flight-route"><div class="airport"><strong>${f.departure}</strong><span>${cities[from]}</span><small>${from}</small></div><div class="journey">${f.duration}<div class="route-line"><span>✈</span></div><span>نموذج رحلة مباشرة</span></div><div class="airport"><strong>${f.arrival}</strong><span>${cities[to]}</span><small>${to}</small></div></div><div class="price-box"><div><strong>${money(price)} <span style="font-size:12px">USD</span></strong><small>إجمالي تجريبي لـ ${passengers} ${passengers===1?'مسافر':'مسافرين'}</small></div><button class="primary" type="button">تفاصيل الرحلة ↖</button></div></div><div class="flight-bottom"><span>▣ الدرجة الاقتصادية</span><span>◷ أوقات توضيحية</span>${round?'<span>↔ يشمل نموذج العودة</span>':''}</div>`;
- card.querySelector('button').addEventListener('click',()=>{const content=document.getElementById('details-content');content.replaceChildren();const rows=[['شركة الطيران',a.name],['المسار',`${cities[from]} ← ${cities[to]}`],['تاريخ المغادرة',dateText(date)],['وقت المغادرة والوصول',`${f.departure} — ${f.arrival}`],['المسافرون',String(passengers)],['السعر التجريبي الإجمالي',`${money(price)} USD`]];if(round)rows.push(['تاريخ العودة',dateText(returnDate)],['نموذج العودة',`${cities[to]} ← ${cities[from]} · 10:00 — 12:45`]);rows.forEach(([label,value])=>{const row=document.createElement('div');row.className='detail-row';const l=document.createElement('span'),v=document.createElement('b');l.textContent=label;v.textContent=value;row.append(l,v);content.append(row)});document.getElementById('details').showModal()});list.append(card)})}
- document.getElementById('time-filter').addEventListener('change',render);document.getElementById('sort').addEventListener('change',render);document.querySelectorAll('.close,.close-details').forEach(e=>e.addEventListener('click',()=>document.getElementById('details').close()));render();
+ const chosen=params.getAll('airline');
+ const filters=[...document.querySelectorAll('.air-filter')];
+ filters.forEach(e=>{e.checked=chosen.length?chosen.includes(e.value):true;e.addEventListener('change',check)});
+ const summary=document.getElementById('source-status'),retry=document.getElementById('retry');
+ let pending,requestId=0;
+ function render(ids,statuses,loading=false){
+  list.replaceChildren();document.getElementById('result-count').textContent=`${ids.length} ${ids.length===1?'مصدر بحث':'مصادر بحث'}`;
+  if(!ids.length){summary.textContent='اختر شركة طيران واحدة على الأقل.';return}
+  summary.textContent=loading?'جارٍ التحقق من إمكانية الوصول إلى مصادر الحجز…':'لا توجد بيانات رحلات مؤكدة متاحة للعرض داخل الموقع.';
+  ids.forEach(id=>{
+   const source=sources[id],status=statuses[id];
+   const card=document.createElement('article');card.className='flight-card source-card';
+   const top=document.createElement('div');top.className='flight-top';
+   const name=document.createElement('div');name.className='airline-name';
+   const mark=document.createElement('span');mark.className='airline-mark';mark.textContent=source.code;
+   name.append(mark,document.createTextNode(source.name));
+   const badge=document.createElement('span');badge.textContent=loading?'جارٍ التحقق…':status==='blocked'?'الوصول غير متاح':'البيانات غير متاحة';
+   top.append(name,badge);
+   const body=document.createElement('div');body.className='source-body';
+   const text=document.createElement('p');text.textContent=loading?'نتحقق من إمكانية قراءة صفحة الحجز.':status==='blocked'?'موقع الشركة رفض قراءة صفحته آليًا عبر هذه الخدمة.':status==='integration_required'?'صفحة الحجز متاحة، لكن عرض الرحلات والأسعار هنا يحتاج إلى ربط مصدر بيانات الشركة.':'تعذّر التحقق من صفحة الشركة. يمكنك متابعة البحث من الرابط الأصلي.';
+   const link=document.createElement('a');link.className='primary official-link';link.href=source.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=`افتح صفحة حجز ${source.name} ↗`;
+   const note=document.createElement('small');note.textContent='ستفتح صفحة الشركة في نافذة جديدة. أعد إدخال المدن والتواريخ وعدد المسافرين هناك.';
+   body.append(text,link,note);card.append(top,body);list.append(card);
+  });
+ }
+ async function check(){
+  const id=++requestId;pending?.abort();const controller=new AbortController();pending=controller;
+  const selected=filters.filter(e=>e.checked).map(e=>e.value);render(selected,{},true);retry.disabled=true;
+  if(!selected.length){retry.disabled=false;return}
+  const query=new URLSearchParams();selected.forEach(a=>query.append('airline',a));
+  const timer=setTimeout(()=>controller.abort(),15000);
+  try{
+   const response=await fetch(`/api/sources?${query}`,{signal:controller.signal,cache:'no-store'});
+   if(!response.ok)throw Error('Source check failed');
+   const data=await response.json();if(!Array.isArray(data.sources))throw Error('Invalid source response');
+   if(id!==requestId)return;
+   const statuses={};data.sources.forEach(s=>{if(s&&selected.includes(s.id)&&['blocked','integration_required','unavailable'].includes(s.status))statuses[s.id]=s.status});
+   render(selected,statuses);
+  }catch{if(id===requestId)render(selected,{})}
+  finally{clearTimeout(timer);if(id===requestId)retry.disabled=false}
+ }
+ retry.addEventListener('click',check);check();
 }
