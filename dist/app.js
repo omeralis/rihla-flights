@@ -42,10 +42,17 @@ if(list){
  currencyFilter.value=search.currency;
  let responseData=null,failure='',loading=false;
  const el=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node};
- function link(id,label){let url=providers[id].base;try{url=RihlaSearch.build(id,search)}catch{}const a=el('a','primary official-link',label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a}
+ function icon(path,cls=''){
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  for(const [key,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',width:'18',height:'18'}))svg.setAttribute(key,value);
+  if(cls)svg.setAttribute('class',cls);
+  const shape=document.createElementNS('http://www.w3.org/2000/svg','path');shape.setAttribute('d',path);svg.append(shape);return svg;
+ }
+ function link(id,label){let url=providers[id].base;try{url=RihlaSearch.build(id,search)}catch{}const a=el('a','primary official-link',label.replace(/\s*[↖↗]$/,''));a.append(icon('M6 18 18 6M6 6h12v12'));a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a}
  function render(){
+  list.setAttribute('aria-busy',String(loading));
   list.replaceChildren();const selected=filters.filter(e=>e.checked).map(e=>e.value);
-  if(loading){count.textContent='جارٍ البحث لدى الشركات…';summary.textContent='قد يستغرق البحث حتى دقيقة. نقرأ صفحات الشركات الآن.';list.append(el('div','empty-state','✈ جارٍ البحث عن رحلاتك…'));return}
+  if(loading){count.textContent='جارٍ البحث لدى الشركات…';summary.textContent='قد يستغرق البحث حتى دقيقة. نقرأ صفحات الشركات الآن.';list.append(el('div','empty-state loading-state','جارٍ البحث عن رحلاتك…'));return}
   if(failure){count.textContent='تعذّر إكمال البحث';summary.textContent=failure;selected.forEach(id=>{const box=el('article','flight-card source-card');const body=el('div','source-body');body.append(el('h2','',providers[id].name),link(id,`تابع البحث لدى ${providers[id].name} ↗`));box.append(body);list.append(box)});return}
   if(!selected.length){count.textContent='اختر شركة';summary.textContent='اختر شركة طيران واحدة على الأقل لعرض النتائج.';return}
   if(!responseData)return;
@@ -55,14 +62,16 @@ if(list){
   const checked=new Date(responseData.checkedAt);summary.textContent=Number.isNaN(checked.getTime())?'':`آخر تحقق: ${checked.toLocaleTimeString('ar',{hour:'2-digit',minute:'2-digit'})} · السعر كما يعرضه المصدر${search.round?' · راجع إجمالي الذهاب والعودة لدى الشركة':''}`;
   for(const f of flights){
    const card=el('article','flight-card'),top=el('div','flight-top');
-   top.append(el('div','airline-name',providers[f.airline].name),el('span','',`${f.leg==='return'?'العودة':'الذهاب'} · ${dateText(f.date)}`));
+   card.dataset.airline=f.airline;
+   const airlineName=el('div','airline-name');airlineName.append(el('span','airline-mark',{tarco:'TC',badr:'J4',sudanair:'SD'}[f.airline]),el('span','',providers[f.airline].name));
+   top.append(airlineName,el('span','',`${f.leg==='return'?'العودة':'الذهاب'} · ${dateText(f.date)}`));
    const body=el('div','flight-body'),route=el('div','flight-route');
    for(const [airport,time] of [[f.from,f.departure],[f.to,f.arrival]]){
     const box=el('div','airport');box.append(el('strong','',time),el('span','',cities[airport]||airport),el('small','',airport));
     if(airport===f.to&&f.arrivalDayOffset)box.append(el('span','next-day','اليوم التالي'));
     route.append(box);
    }
-   const journey=el('div','journey',f.duration),line=el('div','route-line');line.append(el('span','','✈'));journey.append(line,el('span','',f.connection==='Direct'?'رحلة مباشرة':f.connection));route.insertBefore(journey,route.children[1]);
+   const journey=el('div','journey',f.duration),line=el('div','route-line');line.append(icon('m21 3-8 18-3-8-7-3 18-7Zm0 0L10 13','journey-plane'));journey.append(line,el('span','',f.connection==='Direct'?'رحلة مباشرة':f.connection));route.insertBefore(journey,route.children[1]);
    const price=el('div','price-box');price.append(el('strong','',`${Number(f.price).toLocaleString('en-US',{maximumFractionDigits:2})} ${f.currency==='SDG'?'ج.س':f.currency}`),el('small','','السعر المعروض لدى الشركة'),link(f.airline,'راجع السعر والحجز ↖'));
    body.append(route,price);const bottom=el('div','flight-bottom');bottom.append(el('span','','بيانات من صفحة الشركة'),el('span','','الإجمالي وشروط السعر يُؤكَّدان عند الحجز'));card.append(top,body,bottom);list.append(card);
   }
