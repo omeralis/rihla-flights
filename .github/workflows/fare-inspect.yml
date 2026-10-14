@@ -1,0 +1,52 @@
+name: Inspect actual SAR fares and booking sessions
+on:
+  push:
+    branches: [currency-reliability]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build browser service
+        run: docker build -f Dockerfile.vercel -t rihla-inspect .
+      - name: Read booking results and SAR currency
+        run: |
+          docker run --rm -i --entrypoint python rihla-inspect - <<'PY'
+          import asyncio,json,re
+          from urllib.parse import urlencode
+          from cloakbrowser import launch_async
+          from backend.search import PROVIDERS
+          async def main():
+              browser=await launch_async(headless=True)
+              try:
+                  async def read(id):
+                      context=await browser.new_context(locale='en-GB')
+                      try:
+                          page=await context.new_page()
+                          for currency,origin,destination,date in [('SDG','PZU','KRT','2026-10-18'),('SAR','PZU','CAI','2026-10-21')]:
+                              query=urlencode({'OriginAirportCode':origin,'DestinationAirportCode':destination,'OutboundDate':date,'Currency':currency,'TravelerTypes[0].Key':'AD','TravelerTypes[0].Value':'1','TravelerTypes[1].Key':'CHD','TravelerTypes[1].Value':'0','TravelerTypes[2].Key':'INF','TravelerTypes[2].Value':'0'})
+                              url=PROVIDERS[id]['base']+'/BookingEngine/SearchResult?'+query
+                              try:
+                                  response=await page.goto(url,wait_until='domcontentloaded',timeout=45000)
+                                  if response and response.status in [401,403,429]:
+                                      first=response.status
+                                      entry=await page.goto(PROVIDERS[id]['base']+'/BookingEngine',wait_until='domcontentloaded',timeout=45000)
+                                      print('SESSION_ENTRY '+json.dumps({'id':id,'directStatus':first,'entryStatus':entry.status if entry else None}),flush=True)
+                                      if entry and entry.status==200:response=await page.goto(url,wait_until='domcontentloaded',timeout=45000)
+                                  if response and response.status==200:
+                                      try:await page.wait_for_function("()=>/Travel time|No results/.test(document.body.innerText)",timeout=15000)
+                                      except Exception:pass
+                                  text=await page.locator('body').inner_text()
+                                  text=re.sub(r'\(S\([^)]*\)\)','(session)',text)
+                                  print('FARE_PROBE '+json.dumps({'id':id,'currency':currency,'from':origin,'to':destination,'date':date,'httpStatus':response.status if response else None,'title':await page.title(),'text':text[:25000]}),flush=True)
+                              except Exception as error:print('FARE_PROBE '+json.dumps({'id':id,'currency':currency,'errorClass':type(error).__name__}),flush=True)
+                      finally:await context.close()
+                  await asyncio.gather(*(read(id) for id in PROVIDERS))
+              finally:await browser.close()
+          asyncio.run(main())
+          PY
