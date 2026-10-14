@@ -1,4 +1,4 @@
-name: Diagnose production currency search
+name: Diagnose provider-specific currency results
 on:
   push:
     branches: [diagnose-currency-results]
@@ -12,24 +12,20 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Read production API status
+      - name: Compare production searches
         run: |
           python3 - <<'PY'
           import json,urllib.request,urllib.error
           from urllib.parse import urlencode
-          for path in ['/api/health','/api/search?'+urlencode({'from':'PZU','to':'CAI','date':'2026-10-21','passengers':1,'trip':'oneway','airline':['tarco','badr','sudanair'],'currency':'USD'},doseq=True),'/api/search?'+urlencode({'from':'PZU','to':'CAI','date':'2026-10-21','passengers':1,'trip':'oneway','airline':['tarco','badr','sudanair'],'currency':'SDG'},doseq=True)]:
+          cases=[('2026-10-15',['tarco','badr','sudanair'],'SDG'),('2026-10-22',['tarco'],'USD'),('2026-10-22',['tarco'],'SDG')]
+          for date,airlines,currency in cases:
+              query=urlencode({'from':'PZU','to':'CAI','date':date,'passengers':1,'trip':'oneway','airline':airlines,'currency':currency},doseq=True)
               try:
-                  with urllib.request.urlopen('https://rihla-flights.vercel.app'+path,timeout=100) as r:
-                      text=r.read(100000).decode()
-                      try:data=json.loads(text)
-                      except ValueError:data={'non_json':True}
-                      print('PRODUCTION_PROBE '+json.dumps({'path':path,'status':r.status,'data':data}),flush=True)
+                  with urllib.request.urlopen('https://rihla-flights.vercel.app/api/search?'+query,timeout=100) as r:
+                      data=json.load(r)
+                      print('PRODUCTION_PROBE '+json.dumps({'date':date,'currency':currency,'status':r.status,'data':data}),flush=True)
               except urllib.error.HTTPError as error:
-                  body=error.read(100000).decode()
-                  try:data=json.loads(body)
-                  except ValueError:data={'non_json':True}
-                  print('PRODUCTION_PROBE '+json.dumps({'path':path,'status':error.code,'data':data}),flush=True)
-                  if error.code in [401,403]:break
+                  print('PRODUCTION_PROBE '+json.dumps({'date':date,'currency':currency,'status':error.code,'body':error.read(3000).decode()}),flush=True)
               except Exception as error:
-                  print('PRODUCTION_PROBE '+json.dumps({'path':path,'error':type(error).__name__}),flush=True)
+                  print('PRODUCTION_PROBE '+json.dumps({'date':date,'currency':currency,'error':type(error).__name__}),flush=True)
           PY
