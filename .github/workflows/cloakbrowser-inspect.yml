@@ -19,26 +19,48 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
-          import json,re,pathlib
-          from cloakbrowser import launch
+          import json,re
           from urllib.parse import urlsplit
-          def scrub(s):
-           return re.sub(r'\(S\([^)]*\)\)', '(S([redacted]))',s)
+          from cloakbrowser import launch
+          def scrub(s):return re.sub(r'\(S\([^)]*\)\)', '(S([redacted]))',s)
+          sources={"tarco":"https://fo-emea.ttinteractive.com/Zenith/FrontOffice/tarcoair/en-GB","badr":"https://fo-emea.ttinteractive.com/Zenith/FrontOffice/badrairlines/en-GB","sudanair":"https://emea.ttinteractive.com/Zenith/FrontOffice/SudanAirways/en-GB"}
           browser=launch(headless=True)
           try:
-           page=browser.new_page(locale="en-GB")
-           r=page.goto("https://fo-emea.ttinteractive.com/Zenith/FrontOffice/tarcoair/en-GB",wait_until="domcontentloaded",timeout=45000)
-           page.wait_for_timeout(5000)
-           info=page.evaluate("""() => ({
-           title:document.title,text:document.body.innerText.slice(0,2500),
-           inputs:Array.from(document.querySelectorAll('input:not([type=hidden])'),e=>e.outerHTML),
-           appRoots:Array.from(document.querySelectorAll('*')).filter(e=>e.__vue_app__).map(e=>({tag:e.tagName,id:e.id,keys:Object.keys(e.__vue_app__._instance?.proxy||{})})),
-           snippets:Array.from(document.scripts).filter(s=>!s.src).flatMap(s=>{
-            const text=s.textContent;return ['SearchResult','searchFlights','searchFlight','originInput','departureAirportCode','createApp'].map(k=>{const i=text.indexOf(k);return i<0?null:{marker:k,text:text.slice(Math.max(0,i-1000),i+4500)}}).filter(Boolean)
-           })
-          })""")
-           info["status"]=r.status
-           print("INSPECTION_JSON "+scrub(json.dumps(info)),flush=True)
+           for name,url in sources.items():
+            context=browser.new_context(locale="en-GB")
+            page=context.new_page()
+            calls=[]
+            def record(r):
+             if r.request.resource_type in ["xhr","fetch"]:
+              calls.append({"path":scrub(urlsplit(r.url).path),"status":r.status,"method":r.request.method})
+            page.on("response",record)
+            try:
+             page.goto(url,wait_until="domcontentloaded",timeout=45000)
+             page.wait_for_timeout(4000)
+             page.locator("#oneWay").check()
+             page.locator("#originInput").fill("PZU")
+             page.wait_for_timeout(500)
+             print("OPTIONS_JSON "+json.dumps({"source":name,"origin":page.locator("#originList").inner_text()}),flush=True)
+             page.locator("#originList").get_by_text(re.compile(r"\bPZU\b")).first.click()
+             page.locator("#destinationInput").fill("CAI")
+             page.wait_for_timeout(500)
+             print("OPTIONS_JSON "+json.dumps({"source":name,"destination":page.locator("#destinationList").inner_text()}),flush=True)
+             page.locator("#destinationList").get_by_text(re.compile(r"\bCAI\b")).first.click()
+             field=page.locator(".js-searchbar-date-input").first
+             field.fill("21/10/2026");field.press("Tab")
+             page.get_by_role("button",name="Search",exact=True).click()
+             page.wait_for_timeout(12000)
+             print("SEARCH_JSON "+scrub(json.dumps({"source":name,"path":urlsplit(page.url).path,"query":urlsplit(page.url).query,"title":page.title(),"text":page.locator("body").inner_text()[:13000],"requests":calls})),flush=True)
+            except Exception as exc:
+             print("SEARCH_JSON "+scrub(json.dumps({"source":name,"error":type(exc).__name__,"message":str(exc)[:900],"text":page.locator("body").inner_text()[:2500]})),flush=True)
+            finally:context.close()
+           page=browser.new_page()
+           page.goto("https://www.tarcoaviation.com/TarcoAviation/book-a-flight.html",wait_until="domcontentloaded",timeout=45000)
+           r=page.context.request.get("https://www.tarcoaviation.com/TarcoAviation/servicejs/book-a-flight.js")
+           js=r.text()
+           for marker in ["SearchResult","GetAvailabilitySummary"]:
+            i=js.find(marker)
+            print("SCRIPT_JSON "+json.dumps({"marker":marker,"code":js[max(0,i-2200):i+2400]}),flush=True)
           finally:browser.close()
           
           PY
