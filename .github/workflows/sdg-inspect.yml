@@ -1,0 +1,44 @@
+name: Inspect SDG provider fares
+on:
+  push:
+    branches: [sdg-currency]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build browser service
+        run: docker build -f Dockerfile.vercel -t rihla-sdg .
+      - name: Read actual SDG result pages
+        run: |
+          docker run --rm -i --entrypoint python rihla-sdg - <<'PY'
+          import asyncio,json,re
+          from cloakbrowser import launch_async
+          from backend.search import PROVIDERS,booking_url
+          search={'from':'PZU','to':'CAI','date':'2026-10-21','passengers':1,'round':False}
+          async def main():
+              browser=await launch_async(headless=True)
+              try:
+                  async def read(id):
+                      context=await browser.new_context(locale='en-GB')
+                      try:
+                          page=await context.new_page()
+                          url=booking_url(id,search).replace('Currency=USD','Currency=SDG')
+                          response=await page.goto(url,wait_until='domcontentloaded',timeout=60000)
+                          try:await page.wait_for_load_state('networkidle',timeout=15000)
+                          except Exception:pass
+                          text=await page.locator('body').inner_text()
+                          text=re.sub(r'\(S\([^)]*\)\)','(session)',text)
+                          print('SDG_PROBE '+json.dumps({'id':id,'status':response.status if response else None,'title':await page.title(),'text':text[:30000]}),flush=True)
+                      except Exception as error:
+                          print('SDG_PROBE '+json.dumps({'id':id,'error':type(error).__name__}),flush=True)
+                      finally:await context.close()
+                  await asyncio.gather(*(read(id) for id in PROVIDERS))
+              finally:await browser.close()
+          asyncio.run(main())
+          PY
