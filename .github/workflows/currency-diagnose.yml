@@ -1,0 +1,35 @@
+name: Diagnose production currency search
+on:
+  push:
+    branches: [diagnose-currency-results]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Read production API status
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error
+          from urllib.parse import urlencode
+          for path in ['/api/health','/api/search?'+urlencode({'from':'PZU','to':'CAI','date':'2026-10-21','passengers':1,'trip':'oneway','airline':['tarco','badr','sudanair'],'currency':'USD'},doseq=True),'/api/search?'+urlencode({'from':'PZU','to':'CAI','date':'2026-10-21','passengers':1,'trip':'oneway','airline':['tarco','badr','sudanair'],'currency':'SDG'},doseq=True)]:
+              try:
+                  with urllib.request.urlopen('https://rihla-flights.vercel.app'+path,timeout=100) as r:
+                      text=r.read(100000).decode()
+                      try:data=json.loads(text)
+                      except ValueError:data={'non_json':True}
+                      print('PRODUCTION_PROBE '+json.dumps({'path':path,'status':r.status,'data':data}),flush=True)
+              except urllib.error.HTTPError as error:
+                  body=error.read(100000).decode()
+                  try:data=json.loads(body)
+                  except ValueError:data={'non_json':True}
+                  print('PRODUCTION_PROBE '+json.dumps({'path':path,'status':error.code,'data':data}),flush=True)
+                  if error.code in [401,403]:break
+              except Exception as error:
+                  print('PRODUCTION_PROBE '+json.dumps({'path':path,'error':type(error).__name__}),flush=True)
+          PY
