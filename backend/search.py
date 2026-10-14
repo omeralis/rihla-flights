@@ -11,7 +11,7 @@ PROVIDERS = {
     'sudanair': {'name': 'سودانير', 'base': 'https://emea.ttinteractive.com/Zenith/FrontOffice/SudanAirways/en-GB'},
 }
 AIRPORTS = {'PZU', 'CAI', 'JED', 'RUH', 'DXB', 'SHJ', 'ADD', 'EBB', 'DOH', 'KRT'}
-CURRENCIES = {'USD', 'SDG'}
+CURRENCIES = {'SDG', 'SAR', 'USD'}
 
 def validate(args):
     origin, destination = args.get('from', ''), args.get('to', '')
@@ -29,9 +29,9 @@ def validate(args):
     trip = args.get('trip', 'oneway')
     if trip not in {'oneway', 'round'}:
         raise ValueError('نوع الرحلة غير صحيح.')
-    currency = args.get('currency', 'USD')
+    currency = args.get('currency', 'SDG')
     if currency not in CURRENCIES:
-        raise ValueError('اختر الدولار الأمريكي أو الجنيه السوداني.')
+        raise ValueError('اختر الجنيه السوداني أو الريال السعودي أو الدولار الأمريكي.')
     back = None
     if trip == 'round':
         try:
@@ -47,7 +47,7 @@ def validate(args):
 
 def booking_url(airline, search):
     provider = PROVIDERS[airline]
-    currency = search.get('currency', 'USD')
+    currency = search.get('currency', 'SDG')
     if currency not in CURRENCIES:
         raise ValueError('Invalid currency.')
     params = {'OriginAirportCode': search['from'], 'DestinationAirportCode': search['to'], 'OutboundDate': search['date'], 'Currency': currency}
@@ -61,13 +61,13 @@ def booking_url(airline, search):
 # Restrict parsing to flight rows below the date calendar. A neighbouring day's
 # "From $..." is not an offer for the requested date. Fail closed on UI changes.
 ROW = re.compile(r'(?m)^([A-Z]{3})\s*\n(\d{2}:\d{2})\s*\nstraight\s*\n([A-Z]{3})\s*\n(\d{2}:\d{2})(?:\s+(plus_one))?\s*\nTravel time\s*\n([^\n]+)\s*\nFlight connection\s*\n([^\n]+)')
-MONEY = re.compile(r'(\$|USD\b|SDG\b|ج\.س\.)\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(\.\d{1,2})?')
+MONEY = re.compile(r'(\$|USD\b|SDG\b|SAR\b|ج\.س\.|ر\.س\.)\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(\.\d{1,2})?')
 
 def parse_results(text, search):
-    requested_currency = search.get('currency', 'USD')
+    requested_currency = search.get('currency', 'SDG')
     if requested_currency not in CURRENCIES:
         raise ValueError('Invalid currency.')
-    text = text.replace('\xa0', ' ').replace('\r', '')
+    text = re.sub(r'[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]', '', text.replace('\xa0', ' ').replace('\r', ''))
     matches = list(ROW.finditer(text))
     flights = []
     for index, match in enumerate(matches):
@@ -83,7 +83,8 @@ def parse_results(text, search):
         price_match = MONEY.search(tail)
         if not price_match:
             raise ValueError('The flight row has no readable fare.')
-        currency = 'USD' if price_match.group(1) in {'$', 'USD'} else 'SDG'
+        marker = price_match.group(1)
+        currency = 'USD' if marker in {'$', 'USD'} else 'SAR' if marker in {'SAR', 'ر.س.'} else 'SDG'
         if currency != requested_currency:
             return {'status': 'currency_unavailable', 'flights': []}
         amount = price_match.group(2).replace(',', '')
@@ -101,41 +102,97 @@ def parse_results(text, search):
     raise ValueError('The source page did not contain recognizable flight results.')
 
 async def search_airlines(search):
+    import logging
     from cloakbrowser import launch_async
+    logger = logging.getLogger(__name__)
+    log_currency = re.sub(r'[^A-Z]', '', search.get('currency', 'SDG'))[:3]
     browser = await launch_async(headless=True)
     try:
         async def read(airline):
             result = {'id': airline, 'name': PROVIDERS[airline]['name'], 'bookingUrl': booking_url(airline, search), 'status': 'unavailable', 'flights': []}
-            context = await browser.new_context(locale='en-GB')
+            stage = 'context'
+            deadline = asyncio.get_running_loop().time() + 65
+
+            def failure(reason, *, status='unavailable', http_status=None, error=None):
+                result.update(status=status, reason=reason, stage=stage, flights=[])
+                if http_status is not None:
+                    result['httpStatus'] = http_status
+                if error is not None:
+                    result['errorClass'] = re.sub(r'[^A-Za-z0-9_]', '', type(error).__name__)[:80]
+                logger.warning('Airline read failed provider=%s currency=%s stage=%s reason=%s http_status=%s error_class=%s', airline, log_currency, stage, reason, http_status, result.get('errorClass'))
+
+            def remaining_ms(limit):
+                return max(1, min(limit, int((deadline - asyncio.get_running_loop().time()) * 1000)))
+
             try:
-                page = await context.new_page()
-                response = await page.goto(result['bookingUrl'], wait_until='domcontentloaded', timeout=45000)
-                if not response or response.status != 200:
-                    result['status'] = 'blocked' if response and response.status in {401, 403, 429} else 'unavailable'
-                    return result
-                try:
-                    await page.wait_for_load_state('networkidle', timeout=12000)
-                except Exception:
-                    pass
-                await page.wait_for_function("() => /Travel time|No results/.test(document.body.innerText)", timeout=20000)
-                if (await page.title()).strip().lower() != 'search result':
-                    return result
-                text = await page.locator('body').inner_text()
-                # Native result views are English and show the requested date.
-                # Reject mismatched query pages rather than presenting stale offers.
-                requested = dt.date.fromisoformat(search['date'])
-                if search['from'] not in text or search['to'] not in text or requested.strftime('%d %B, %Y').lstrip('0') not in text:
-                    result['status'] = 'unrecognized'
-                    return result
-                try:
-                    result.update(parse_results(text, search))
-                except ValueError:
-                    result['status'] = 'unrecognized'
-                return result
-            except Exception:
-                return result
-            finally:
-                await context.close()
+                # Each source has its own deadline so a slow source cannot discard
+                # results already read from the other airlines.
+                async with asyncio.timeout(65):
+                    for attempt in range(2):
+                        context = None
+                        retryable = False
+                        for key in ('reason', 'stage', 'httpStatus', 'errorClass'):
+                            result.pop(key, None)
+                        stage = 'context'
+                        try:
+                            context = await browser.new_context(locale='en-GB')
+                            page = await context.new_page()
+                            stage = 'navigation'
+                            response = await page.goto(result['bookingUrl'], wait_until='domcontentloaded', timeout=remaining_ms(45000))
+                            http_status = response.status if response else None
+                            if http_status in {401, 403, 429}:
+                                failure('upstream_http', status='blocked', http_status=http_status)
+                                return result
+                            if http_status != 200:
+                                failure('upstream_http' if response else 'network_error', http_status=http_status)
+                                retryable = response is None or 500 <= http_status <= 599
+                            else:
+                                stage = 'readiness'
+                                await page.wait_for_function("() => /Travel time|No results|The currency .* is not valid/.test(document.body.innerText)", timeout=remaining_ms(20000))
+                                stage = 'source_check'
+                                text = await page.locator('body').inner_text()
+                                if re.search(r'The currency\s+' + re.escape(search.get('currency', 'SDG')) + r'\s+is not valid', text):
+                                    failure('unsupported_currency', status='currency_unavailable')
+                                    return result
+                                if (await page.title()).strip().lower() != 'search result':
+                                    failure('unexpected_page', status='unrecognized')
+                                    return result
+                                # Keep source/query verification before parsing offers.
+                                stage = 'query_check'
+                                requested = dt.date.fromisoformat(search['date'])
+                                if search['from'] not in text or search['to'] not in text or requested.strftime('%d %B, %Y').lstrip('0') not in text:
+                                    failure('query_mismatch', status='unrecognized')
+                                    return result
+                                stage = 'parse'
+                                try:
+                                    result.update(parse_results(text, search))
+                                except ValueError as error:
+                                    failure('parse_failed', status='unrecognized', error=error)
+                                return result
+                        except Exception as error:
+                            is_timeout = 'Timeout' in type(error).__name__
+                            reason = 'navigation_timeout' if stage == 'navigation' and is_timeout else 'result_timeout' if stage == 'readiness' and is_timeout else 'network_error' if stage == 'navigation' else 'context_failed' if stage == 'context' else 'read_failed'
+                            failure(reason, error=error)
+                            retryable = stage == 'navigation' or (stage == 'readiness' and is_timeout)
+                        finally:
+                            if context is not None:
+                                try:
+                                    async with asyncio.timeout(2):
+                                        await context.close()
+                                except Exception as error:
+                                    logger.warning('Airline cleanup failed provider=%s currency=%s stage=cleanup reason=cleanup_failed error_class=%s', airline, log_currency, re.sub(r'[^A-Za-z0-9_]', '', type(error).__name__)[:80])
+                        if not retryable or attempt == 1 or deadline - asyncio.get_running_loop().time() <= 1:
+                            break
+                        await asyncio.sleep(0.5)
+            except TimeoutError as error:
+                failure('source_timeout', error=error)
+            except Exception as error:
+                failure('read_failed', error=error)
+            return result
         return await asyncio.gather(*(read(a) for a in search['airlines']))
     finally:
-        await browser.close()
+        try:
+            async with asyncio.timeout(2):
+                await browser.close()
+        except Exception as error:
+            logger.warning('Browser cleanup failed stage=cleanup reason=cleanup_failed error_class=%s', re.sub(r'[^A-Za-z0-9_]', '', type(error).__name__)[:80])

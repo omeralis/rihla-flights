@@ -1,0 +1,139 @@
+Progress bar: 5 steps to follow
+1
+Flight search
+
+2
+Results
+
+3
+Customer
+
+4
+Passenger
+
+5
+Book
+
+Change selection
+Outbound
+17 October, 2026
+Sat
+Port Sudan
+PZU
+flight
+Khartoum
+KRT
+expand_more
+  Departure before noon   Departure after noon
+chevron_left
+No
+Flight
+Thu, 15
+Oct
+Full
+Flight
+Fri, 16
+Oct
+From
+ج.س.
+2,090,000
+.0
+Sat, 17
+Oct
+No
+Flight
+Sun, 18
+Oct
+Avail.
+Flight
+Mon, 19
+Oct
+From
+ج.س.
+2,090,000
+.0
+Tue, 20
+Oct
+From
+ج.س.
+2,090,000
+.0
+Wed, 21
+Oct
+chevron_right
+PZU
+18:30
+straight
+KRT
+19:30
+Travel time
+01h00
+Flight connection
+Direct
+info_outline
+Flight from:
+ج.س.
+2,090,000
+.0
+expand_more
+Economy - Value
+work
+7 Kg Hand Baggage
+ 
+luggage
+Checked Baggage
+ 
+restaurant
+Meal
+ 
+event_available
+Modifiable with Fee
+ 
+paid
+Refundable with Fee
+ج.س.
+2,090,000
+.0
+
+Economy - Flex Plus
+work
+7 Kg Hand Baggage
+ 
+luggage
+Checked Baggage
+ 
+restaurant
+Meal
+ 
+event_available
+Modifiable with Fee
+ 
+monetization_on
+Refundable with Fee
+ج.س.
+2,375,000
+.0
+
+Business - Comfort +
+query_builder
+Priority Boarding
+ 
+work
+7 Kg Hand baggage
+ 
+luggage
+Checked baggage
+ 
+restaurant
+Meal
+ 
+event_available
+Modifiable with Fee
+ 
+monetization_on
+Refundable with Fee
+ج.س.
+3,135,000
+.0
+
+only 3 seat(s) remaining

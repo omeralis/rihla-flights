@@ -5,7 +5,7 @@ from urllib.parse import urlsplit, parse_qs
 from backend.search import parse_results, booking_url, validate
 
 ROOT = Path(__file__).parent / 'fixtures'
-SEARCH = {'from': 'PZU', 'to': 'CAI', 'date': '2026-10-21', 'returnDate': None, 'round': False, 'passengers': 1, 'airlines': ['tarco','badr','sudanair']}
+SEARCH = {'from': 'PZU', 'to': 'CAI', 'date': '2026-10-21', 'returnDate': None, 'round': False, 'passengers': 1, 'airlines': ['tarco','badr','sudanair'], 'currency': 'USD'}
 
 class Args(dict):
     def getlist(self,key):
@@ -49,15 +49,32 @@ class SearchTests(unittest.TestCase):
             result=parse_results((ROOT/fixture).read_text(),{**SEARCH,'currency':currency})
             self.assertEqual(result,{'status':'currency_unavailable','flights':[]})
 
+    def test_sar_fares_include_directional_marks_and_split_decimal(self):
+        result=parse_results((ROOT/'sudanair-sar.txt').read_text(),{**SEARCH,'currency':'SAR'})
+        self.assertEqual(result['status'],'ok')
+        self.assertEqual(result['flights'][0]['price'],1106.46)
+        self.assertEqual(result['flights'][0]['currency'],'SAR')
+        self.assertEqual(parse_results((ROOT/'tarco-sar.txt').read_text(),{**SEARCH,'currency':'SAR'}),{'status':'no_results','flights':[]})
+        self.assertEqual(parse_results((ROOT/'sudanair-sar.txt').read_text(),{**SEARCH,'currency':'SDG'}),{'status':'currency_unavailable','flights':[]})
+
+    def test_actual_khartoum_source_rows(self):
+        for id,price in [('badr',2090000),('sudanair',1000000)]:
+            result=parse_results((ROOT/(id+'-krt-sdg.txt')).read_text(),{**SEARCH,'to':'KRT','date':'2026-10-18','currency':'SDG'})
+            self.assertEqual(result['status'],'ok')
+            self.assertEqual(result['flights'][0]['price'],price)
+            self.assertEqual(result['flights'][0]['to'],'KRT')
+
     def test_currency_is_validated_and_kept_in_all_booking_links(self):
         args=Args({'from':'PZU','to':'CAI','date':(dt.date.today()+dt.timedelta(days=7)).isoformat(),'airline':['badr']})
-        self.assertEqual(validate(args)['currency'],'USD')
+        self.assertEqual(validate(args)['currency'],'SDG')
         self.assertEqual(validate(Args({**args,'currency':'SDG'}))['currency'],'SDG')
         for invalid in ['EUR','','SDG&Currency=USD']:
             with self.assertRaises(ValueError):validate(Args({**args,'currency':invalid}))
         for id in SEARCH['airlines']:
-            query=parse_qs(urlsplit(booking_url(id,{**SEARCH,'currency':'SDG'})).query)
-            self.assertEqual(query['Currency'],['SDG'])
+            for currency in ['SDG','SAR','USD']:
+                query=parse_qs(urlsplit(booking_url(id,{**SEARCH,'currency':currency})).query)
+                self.assertEqual(query['Currency'],[currency])
+        self.assertEqual(validate(Args({**args,'currency':'SAR'}))['currency'],'SAR')
 
     def test_round_trip_link_keeps_dates_and_passenger_counts(self):
         query=parse_qs(urlsplit(booking_url('badr',{**SEARCH,'round':True,'returnDate':'2026-10-28','passengers':3})).query)

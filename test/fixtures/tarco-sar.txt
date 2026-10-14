@@ -1,0 +1,64 @@
+Progress bar: 5 steps to follow
+1
+Flight search
+
+2
+Results
+
+3
+Customer
+
+4
+Passenger
+
+5
+Book
+
+Change selection
+Outbound
+21 October, 2026
+Wed
+Port Sudan
+PZU
+flight
+Cairo Intl
+CAI
+expand_more
+  Departure before noon   Departure after noon
+chevron_left
+Avail.
+Flight
+Sun, 18
+Oct
+Avail.
+Flight
+Mon, 19
+Oct
+From
+ر.س.‏
+1,012
+.00
+Tue, 20
+Oct
+Avail.
+Flight
+Wed, 21
+Oct
+From
+ر.س.‏
+1,012
+.00
+Thu, 22
+Oct
+Avail.
+Flight
+Fri, 23
+Oct
+From
+ر.س.‏
+1,012
+.00
+Sat, 24
+Oct
+chevron_right
+No results

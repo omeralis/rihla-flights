@@ -1,7 +1,7 @@
 const cities={PZU:'بورتسودان',CAI:'القاهرة',JED:'جدة',RUH:'الرياض',DXB:'دبي',SHJ:'الشارقة',ADD:'أديس أبابا',EBB:'عنتيبي',DOH:'الدوحة',KRT:'الخرطوم'};
 const params=new URLSearchParams(location.search);
 const currencies=RihlaSearch.currencies;
-const selectedCurrency=Object.hasOwn(currencies,params.get('currency'))?params.get('currency'):'USD';
+const selectedCurrency=Object.hasOwn(currencies,params.get('currency'))?params.get('currency'):'SDG';
 const today=new Date(); const localISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
 const validDate=RihlaSearch.dateValid;
@@ -58,7 +58,7 @@ if(list){
   if(!responseData)return;
   const sourceList=responseData.sources.filter(s=>selected.includes(s.id));
   const flights=sourceList.flatMap(s=>(s.flights||[]).map(f=>({...f,airline:s.id}))).sort((a,b)=>sort.value==='time'?a.departure.localeCompare(b.departure):a.price-b.price);
-  count.textContent=flights.length?`${flights.length} رحلات من المصادر`:sourceList.some(s=>!['ok','no_results'].includes(s.status))?'النتائج غير مكتملة':'لم تظهر رحلات للتاريخ المختار';
+  count.textContent=flights.length?`${flights.length} رحلات من المصادر`:sourceList.every(s=>s.status==='blocked')?'مصادر الحجز رفضت الاتصال':sourceList.some(s=>!['ok','no_results'].includes(s.status))?'النتائج غير مكتملة':'لم تظهر رحلات للتاريخ المختار';
   const checked=new Date(responseData.checkedAt);summary.textContent=Number.isNaN(checked.getTime())?'':`آخر تحقق: ${checked.toLocaleTimeString('ar',{hour:'2-digit',minute:'2-digit'})} · السعر كما يعرضه المصدر${search.round?' · راجع إجمالي الذهاب والعودة لدى الشركة':''}`;
   for(const f of flights){
    const card=el('article','flight-card'),top=el('div','flight-top');
@@ -72,13 +72,13 @@ if(list){
     route.append(box);
    }
    const journey=el('div','journey',f.duration),line=el('div','route-line');line.append(icon('m21 3-8 18-3-8-7-3 18-7Zm0 0L10 13','journey-plane'));journey.append(line,el('span','',f.connection==='Direct'?'رحلة مباشرة':f.connection));route.insertBefore(journey,route.children[1]);
-   const price=el('div','price-box');price.append(el('strong','',`${Number(f.price).toLocaleString('en-US',{maximumFractionDigits:2})} ${f.currency==='SDG'?'ج.س':f.currency}`),el('small','','السعر المعروض لدى الشركة'),link(f.airline,'راجع السعر والحجز ↖'));
+   const price=el('div','price-box');price.append(el('strong','',`${Number(f.price).toLocaleString('en-US',{maximumFractionDigits:2})} ${f.currency==='SDG'?'ج.س':f.currency==='SAR'?'ر.س':f.currency}`),el('small','','السعر المعروض لدى الشركة'),link(f.airline,'راجع السعر والحجز ↖'));
    body.append(route,price);const bottom=el('div','flight-bottom');bottom.append(el('span','','بيانات من صفحة الشركة'),el('span','','الإجمالي وشروط السعر يُؤكَّدان عند الحجز'));card.append(top,body,bottom);list.append(card);
   }
   for(const source of sourceList){
    if(source.status==='ok')continue;
    const box=el('article','flight-card source-card'),body=el('div','source-body');
-   const message=source.status==='no_results'?'لم يعرض المصدر رحلات للتاريخ والمسار المختارين.':source.status==='currency_unavailable'?`لم يعرض المصدر سعرًا بعملة ${currencies[search.currency]}. جرّب عملة أخرى أو راجع الشركة.`:'تعذّر قراءة نتائج هذه الشركة. النتائج المعروضة للشركات الأخرى تبقى متاحة.';
+   const message=source.status==='no_results'?'لم يعرض المصدر رحلات للتاريخ والمسار المختارين.':source.status==='currency_unavailable'?source.reason==='unsupported_currency'?`هذه الشركة لا تدعم البحث بعملة ${currencies[search.currency]}. اختر عملة أخرى.`:`لم يعرض المصدر سعرًا بعملة ${currencies[search.currency]}. جرّب عملة أخرى أو راجع الشركة.`:source.status==='blocked'?source.httpStatus===429?'الشركة تحدّ عدد طلبات البحث. انتظر قليلًا أو تابع البحث في موقعها مباشرة.':'رفض موقع الشركة اتصال خدمة البحث. تابع البحث في موقع الشركة مباشرة.':source.reason?.includes('timeout')?'استغرق رد الشركة وقتًا طويلًا. حاول تحديث البحث أو افتح موقع الشركة.':source.status==='unrecognized'?source.reason==='query_mismatch'?'أعادت الشركة نتائج لا تطابق تاريخ أو مسار البحث. راجع نتائجها في موقع الشركة مباشرة.':'لم نستطع التحقق من بيانات صفحة الشركة. راجع النتائج في موقعها مباشرة.':'تعذّر الاتصال بالشركة. حاول تحديث البحث أو افتح موقعها مباشرة.';
    body.append(el('h2','',providers[source.id].name),el('p','',message),link(source.id,'افتح نتائج الشركة ↗'));box.append(body);list.append(box);
   }
  }

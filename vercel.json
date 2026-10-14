@@ -2,9 +2,21 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": false,
   "services": {
-    "web": { "root": ".", "runtime": "container", "entrypoint": "Dockerfile.vercel" }
+    "web": {
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "Dockerfile.vercel"
+    }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": { "service": "web" } }
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ],
+  "regions": [
+    "fra1"
   ]
 }

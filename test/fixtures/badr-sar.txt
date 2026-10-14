@@ -1,0 +1,38 @@
+The currency SAR is not valid
+Progress bar: 6 steps to follow
+
+1
+Flight search
+
+2
+Results
+
+3
+Customer
+
+4
+Passenger
+
+5
+Additional Services
+
+6
+Book
+
+flightFLIGHTS
+
+settings_suggestYOUR BOOKING
+
+Trip type
+One way
+Round trip
+Multi city
+Departure
+PZU
+sync_alt
+Arrival
+DXB
+Outbound
+1 Adult, 0 Infant, 0 Children
+expand_more
+Search

@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {build,dateValid}=require('../dist/search-links');
+const {build,dateValid,currencies}=require('../dist/search-links');
 const search={from:'PZU',to:'CAI',date:'2026-10-21',passengers:3,round:false};
 test('passes the actual route, date and adult count using Zenith fields',()=>{
  const url=new URL(build('tarco',search,{embedded:true}));
@@ -15,14 +15,28 @@ test('passes the actual route, date and adult count using Zenith fields',()=>{
  assert.equal(url.searchParams.get('TravelerTypes[2].Value'),'0');
  assert.equal(url.searchParams.get('mode'),'iframe');
  assert.equal(url.searchParams.has('InboundDate'),false);
- assert.equal(url.searchParams.get('Currency'),'USD');
+ assert.equal(url.searchParams.get('Currency'),'SDG');
 });
-test('uses Sudanese pounds in every airline booking link',()=>{
+test('defaults to Sudanese pounds in every airline booking link',()=>{
  for(const id of ['tarco','badr','sudanair']){
-  const url=new URL(build(id,{...search,currency:'SDG'}));
+  const url=new URL(build(id,search));
   assert.equal(url.searchParams.get('Currency'),'SDG');
  }
- for(const currency of ['EUR','','SDG&Currency=USD'])assert.throws(()=>build('badr',{...search,currency}));
+});
+test('preserves each selected currency for every airline',()=>{
+ assert.deepEqual(Object.keys(currencies),['SDG','SAR','USD']);
+ for(const id of ['tarco','badr','sudanair']){
+  for(const currency of ['SDG','SAR','USD']){
+   const url=new URL(build(id,{...search,currency}));
+   assert.equal(url.searchParams.get('Currency'),currency);
+   assert.equal(url.searchParams.getAll('Currency').length,1);
+  }
+ }
+});
+test('rejects unsupported or malformed currencies',()=>{
+ for(const currency of ['EUR','','SAR&Currency=USD','constructor','usd']){
+  assert.throws(()=>build('badr',{...search,currency}),/Invalid currency/);
+ }
 });
 test('preserves round-trip details for all three airline tenants',()=>{
  for(const id of ['tarco','badr','sudanair']){

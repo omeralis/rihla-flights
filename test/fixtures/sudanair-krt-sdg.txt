@@ -1,0 +1,79 @@
+Progress bar: 5 steps to follow
+1
+Flight search
+
+2
+Results
+
+3
+Customer
+
+4
+Passenger
+
+5
+Book
+
+Change selection
+Outbound
+18 October, 2026
+Sun
+Port Sudan
+PZU
+flight
+Khartoum
+KRT
+expand_more
+chevron_left
+From
+ج.س.
+1,000,000
+Thu, 15
+Oct
+No
+Flight
+Fri, 16
+Oct
+From
+ج.س.
+1,000,000
+Sat, 17
+Oct
+From
+ج.س.
+1,000,000
+Sun, 18
+Oct
+No
+Flight
+Mon, 19
+Oct
+From
+ج.س.
+1,000,000
+Tue, 20
+Oct
+From
+ج.س.
+1,000,000
+Wed, 21
+Oct
+chevron_right
+PZU
+23:00
+straight
+KRT
+23:59
+Travel time
+00h59
+Flight connection
+Direct
+info_outline
+BOOK VIA THE WEB
+check_circle
+ج.س.
+1,000,000
+expand_more
+book via the web
+ج.س.
+1,000,000

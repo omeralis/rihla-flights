@@ -1,0 +1,118 @@
+Progress bar: 6 steps to follow
+1
+Flight search
+
+2
+Results
+
+3
+Customer
+
+4
+Passenger
+
+5
+Additional Services
+
+6
+Book
+
+Change selection
+Outbound
+18 October, 2026
+Sun
+Port Sudan
+PZU
+flight
+Khartoum
+KRT
+expand_more
+  Departure before noon   Departure after noon
+chevron_left
+From
+ج.س.
+2,090,000
+Thu, 15
+Oct
+From
+ج.س.
+2,090,000
+Fri, 16
+Oct
+From
+ج.س.
+2,090,000
+Sat, 17
+Oct
+From
+ج.س.
+2,090,000
+Sun, 18
+Oct
+From
+ج.س.
+2,090,000
+Mon, 19
+Oct
+From
+ج.س.
+2,090,000
+Tue, 20
+Oct
+From
+ج.س.
+2,090,000
+Wed, 21
+Oct
+chevron_right
+PZU
+11:00
+straight
+KRT
+12:15
+Travel time
+01h15
+Flight connection
+Direct
+info_outline
+Flight from:
+ج.س.
+2,090,000
+expand_more
+Best fares
+pregnant_woman
+Hand luggage is limited to 7 kg per passenge
+ 
+restaurant
+Enjoy high-quality meal always free
+ 
+warning
+Modifiable - Fee may apply
+ 
+accessible
+Free handling for Medical Cases
+ج.س.
+2,090,000
+
+Business fares
+query_builder
+Priority Boarding
+ 
+paid
+Free Modification before Flight
+ 
+airline_seat_flat_angled
+Sit back and relax in our comfortable Business Class seats
+ 
+event_seat
+Seat Selection
+ 
+local_bar
+lounge Access
+ 
+local_dining
+Savor gourmet meals carefully crafted for our Business Class guests
+ج.س.
+3,325,000
+
+only 4 seat(s) remaining

@@ -2,7 +2,7 @@ name: Verify CloakBrowser live search
 on:
   workflow_dispatch:
   push:
-    branches: [live-cloakbrowser-search, sdg-currency, modern-interface]
+    branches: [live-cloakbrowser-search, sdg-currency, modern-interface, currency-reliability]
   pull_request:
 permissions:
   contents: read
@@ -28,16 +28,16 @@ jobs:
             if curl -sf http://localhost:3000/api/health; then break; fi
             sleep 1
           done
-          for currency in USD SDG; do
+          for currency in USD SDG SAR; do
             curl -fsS --max-time 100 "http://localhost:3000/api/search?from=PZU&to=CAI&date=2026-10-21&passengers=1&trip=oneway&airline=tarco&airline=badr&airline=sudanair&currency=$currency" -o "/tmp/live-$currency.json"
           done
           python3 - <<'PY'
           import json
-          for currency in ['USD','SDG']:
+          for currency in ['USD','SDG','SAR']:
               data=json.load(open('/tmp/live-'+currency+'.json'))
               assert data['search']['currency']==currency
               assert len(data['sources'])==3
-              assert all(s['status'] in ['ok','no_results'] for s in data['sources']),data
+              assert all(s['status'] in (['ok','no_results','currency_unavailable'] if currency=='SAR' else ['ok','no_results']) for s in data['sources']),data
               assert any(s['flights'] for s in data['sources']),data
               for source in data['sources']:
                   assert 'Currency='+currency in source['bookingUrl']
@@ -64,7 +64,21 @@ jobs:
            assert page.locator('#route-title').inner_text()=='بورتسودان ← القاهرة'
            count=page.locator('.price-box').count()
            assert count>=1
-           assert page.locator('#currency-filter').input_value()=='USD'
+           assert page.locator('#currency-filter').input_value()=='SDG'
+           with page.expect_response(lambda r: '/api/search?' in r.url and 'currency=USD' in r.url,timeout=90000) as usd:
+            page.locator('#currency-filter').select_option('USD')
+           assert usd.value.status==200
+           assert all(f['currency']=='USD' for source in usd.value.json()['sources'] for f in source['flights'])
+           page.wait_for_function("() => !document.querySelector('#currency-filter').disabled",timeout=90000)
+           with page.expect_response(lambda r: '/api/search?' in r.url and 'currency=SAR' in r.url,timeout=90000) as sar:
+            page.locator('#currency-filter').select_option('SAR')
+           assert sar.value.status==200
+           assert any(source['flights'] for source in sar.value.json()['sources'])
+           assert all(f['currency']=='SAR' for source in sar.value.json()['sources'] for f in source['flights'])
+           page.wait_for_function("() => !document.querySelector('#currency-filter').disabled",timeout=90000)
+           assert page.locator('.price-box').count()>=1
+           for price in page.locator('.price-box strong').all_inner_texts():assert 'ر.س' in price
+           assert any(source['id']=='badr' and source['status']=='currency_unavailable' for source in sar.value.json()['sources'])
            with page.expect_response(lambda r: '/api/search?' in r.url and 'currency=SDG' in r.url,timeout=90000) as result:
             page.locator('#currency-filter').select_option('SDG')
            data=result.value.json()
@@ -91,7 +105,7 @@ jobs:
            assert result.value.json()['search']['currency']=='SDG'
            page.wait_for_function("() => !document.querySelector('#currency-filter').disabled",timeout=90000)
            assert page.locator('.price-box').count()>=1
-           print('Browser flow passed: actual USD/SDG prices, currency switching, links, form persistence, mobile layout and airline filters; '+str(count)+' live flight cards.')
+           print('Browser flow passed: default SDG and actual USD/SDG/SAR prices, currency switching, links, form persistence, mobile layout and airline filters; '+str(count)+' live flight cards.')
           finally:browser.close()
           
           PY

@@ -1,0 +1,86 @@
+Progress bar: 5 steps to follow
+1
+Flight search
+
+2
+Results
+
+3
+Customer
+
+4
+Passenger
+
+5
+Book
+
+Change selection
+Outbound
+21 October, 2026
+Wed
+Port Sudan
+PZU
+flight
+Cairo Intl
+CAI
+expand_more
+expand_more
+No
+Flight
+Sun, 18
+Oct
+Avail.
+Flight
+Mon, 19
+Oct
+From
+ر.س.‏
+1,106
+.46
+Tue, 20
+Oct
+From
+ر.س.‏
+1,106
+.46
+Wed, 21
+Oct
+From
+ر.س.‏
+1,106
+.46
+Thu, 22
+Oct
+From
+ر.س.‏
+1,106
+.46
+Fri, 23
+Oct
+From
+ر.س.‏
+1,106
+.46
+Sat, 24
+Oct
+expand_more
+PZU
+23:30
+straight
+CAI
+02:30 plus_one
+Travel time
+02h00
+Flight connection
+Direct
+info_outline
+BOOK VIA THE WEB
+check_circle
+ر.س.‏
+1,106
+.46
+expand_more
+book via the web
+ر.س.‏
+1,106
+.46
