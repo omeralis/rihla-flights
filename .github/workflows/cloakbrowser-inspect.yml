@@ -75,8 +75,8 @@ jobs:
                 if len(js)<3000000:
                  path=root/(name+"-"+hashlib.sha256(src.encode()).hexdigest()[:8]+".js")
                  path.write_text(js)
-                        matches=re.findall(r'https?://[^\\s"\\x27<>]+ttinteractive[^\\s"\\x27<>]*|[^\\s"\\x27<>]*BookingEngine/[^\\s"\\x27<>]*',js)
-                        if matches:print(json.dumps({"source":name,"script":urlsplit(src).path,"bookingPaths":[m[:350] for m in matches[:40]]}),flush=True)
+                 matches=re.findall(r'https?://[^\s"\x27<>]+ttinteractive[^\s"\x27<>]*|[^\s"\x27<>]*BookingEngine/[^\s"\x27<>]*',js)
+                 if matches:print(json.dumps({"source":name,"script":urlsplit(src).path,"bookingPaths":[m[:350] for m in matches[:40]]}),flush=True)
               except Exception:pass
             except Exception as exc:
              print(json.dumps({"source":name,"error":type(exc).__name__,"message":str(exc)[:500]}),flush=True)
