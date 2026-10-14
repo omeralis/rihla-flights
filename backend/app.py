@@ -44,7 +44,8 @@ def search():
                 if len(cache) < 100:
                     cache[key] = (time.monotonic() + 30, payload)
         return jsonify(payload), 200, {'Cache-Control': 'no-store'}
-    except Exception:
+    except Exception as exc:
+        app.logger.error('Flight search engine failed (%s)', type(exc).__name__)
         return jsonify(error='SOURCE_UNAVAILABLE', message='تعذّر تشغيل البحث لدى الشركات. حاول مجددًا أو افتح صفحة الشركة.'), 503, {'Cache-Control': 'no-store'}
     finally:
         browser_slots.release()

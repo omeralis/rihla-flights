@@ -95,6 +95,20 @@ jobs:
           finally:browser.close()
           
           PY
+      - name: Diagnose browser engine on failure
+        if: failure()
+        run: |
+          docker exec -i rihla-live python - <<'PY'
+          import asyncio,traceback
+          from backend.search import search_airlines
+          search={'from':'PZU','to':'CAI','date':'2026-10-21','passengers':1,'round':False,'currency':'SDG','airlines':['badr']}
+          try:
+              sources=asyncio.run(search_airlines(search))
+              print('ENGINE_DIAGNOSTIC',[(s['id'],s['status']) for s in sources])
+          except Exception as error:
+              print('ENGINE_EXCEPTION',type(error).__name__)
+              for frame in traceback.extract_tb(error.__traceback__):print(frame.name,frame.lineno)
+          PY
       - name: Service logs on failure
         if: failure()
         run: docker logs rihla-live || true
