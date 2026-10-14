@@ -1,0 +1,49 @@
+name: Verify CloakBrowser live search
+on:
+  workflow_dispatch:
+  push:
+    branches: [live-cloakbrowser-search]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check source and parsers
+        run: |
+          python3 -m unittest discover -s test -p '*_test.py'
+          node test/search-links.test.js
+          node --check dist/app.js
+      - name: Build browser service
+        run: docker build -f Dockerfile.vercel -t rihla-live .
+      - name: Start and check the service
+        run: |
+          docker run -d --name rihla-live -p 3000:3000 rihla-live
+          for attempt in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health; then break; fi
+            sleep 1
+          done
+          curl -fsS --max-time 100 'http://localhost:3000/api/search?from=PZU&to=CAI&date=2026-10-21&passengers=1&trip=oneway&airline=tarco&airline=badr&airline=sudanair' -o /tmp/live-results.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('/tmp/live-results.json'))
+          assert len(data['sources'])==3
+          assert all(s['status'] in ['ok','no_results'] for s in data['sources']),data
+          assert any(s['flights'] for s in data['sources']),data
+          for source in data['sources']:
+              for f in source['flights']:
+                  assert f['from']=='PZU' and f['to']=='CAI' and f['date']=='2026-10-21'
+                  assert f['price']>=0 and f['priceScope']=='source_displayed'
+          print(json.dumps(data))
+          PY
+      - name: Service logs on failure
+        if: failure()
+        run: docker logs rihla-live || true
+      - name: Stop service
+        if: always()
+        run: docker rm -f rihla-live || true

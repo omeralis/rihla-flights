@@ -1,0 +1,122 @@
+Progress bar: 6 steps to follow
+1
+Flight search
+
+2
+Results
+
+3
+Customer
+
+4
+Passenger
+
+5
+Additional Services
+
+6
+Book
+
+Change selection
+Outbound
+21 October, 2026
+Wed
+Port Sudan
+PZU
+flight
+Cairo Intl
+CAI
+expand_more
+  Departure before noon   Departure after noon
+chevron_left
+Avail.
+Flight
+Sun, 18
+Oct
+From
+$
+270
+.00
+Mon, 19
+Oct
+Avail.
+Flight
+Tue, 20
+Oct
+From
+$
+270
+.00
+Wed, 21
+Oct
+From
+$
+270
+.00
+Thu, 22
+Oct
+Avail.
+Flight
+Fri, 23
+Oct
+From
+$
+270
+.00
+Sat, 24
+Oct
+chevron_right
+PZU
+23:00
+straight
+CAI
+02:30 plus_one
+Travel time
+02h30
+Flight connection
+Direct
+info_outline
+Flight from:
+$
+270
+.00
+expand_more
+Best fares
+pregnant_woman
+Hand luggage is limited to 7 kg per passenge
+ 
+restaurant
+Enjoy high-quality meal always free
+ 
+warning
+Modifiable - Fee may apply
+ 
+accessible
+Free handling for Medical Cases
+$
+270
+.00
+
+Business fares
+query_builder
+Priority Boarding
+ 
+paid
+Free Modification before Flight
+ 
+airline_seat_flat_angled
+Sit back and relax in our comfortable Business Class seats
+ 
+event_seat
+Seat Selection
+ 
+local_bar
+lounge Access
+ 
+local_dining
+Savor gourmet meals carefully crafted for our Business Class guests
+$
+600
+.00
+
+only 6 seat(s) remaining

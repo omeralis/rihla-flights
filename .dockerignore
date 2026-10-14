@@ -1,0 +1,8 @@
+.git
+.github
+.openai
+.vercel
+node_modules
+test
+__pycache__
+*.pyc
