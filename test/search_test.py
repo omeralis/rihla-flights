@@ -36,6 +36,29 @@ class SearchTests(unittest.TestCase):
         result=parse_results((ROOT/'badr.txt').read_text(),{**SEARCH,'passengers':3})
         self.assertEqual(result['flights'][0]['price'],270)
 
+    def test_actual_sudanese_pound_prices_without_conversion(self):
+        for airline, price in [('badr',2565000),('sudanair',1800000)]:
+            result=parse_results((ROOT/(airline+'-sdg.txt')).read_text(),{**SEARCH,'currency':'SDG'})
+            self.assertEqual(result['status'],'ok')
+            self.assertEqual(result['flights'][0]['price'],price)
+            self.assertEqual(result['flights'][0]['currency'],'SDG')
+        self.assertEqual(parse_results((ROOT/'tarco-sdg.txt').read_text(),{**SEARCH,'currency':'SDG'}),{'status':'no_results','flights':[]})
+
+    def test_source_prices_are_not_relabelled_as_the_requested_currency(self):
+        for fixture,currency in [('badr.txt','SDG'),('badr-sdg.txt','USD')]:
+            result=parse_results((ROOT/fixture).read_text(),{**SEARCH,'currency':currency})
+            self.assertEqual(result,{'status':'currency_unavailable','flights':[]})
+
+    def test_currency_is_validated_and_kept_in_all_booking_links(self):
+        args=Args({'from':'PZU','to':'CAI','date':(dt.date.today()+dt.timedelta(days=7)).isoformat(),'airline':['badr']})
+        self.assertEqual(validate(args)['currency'],'USD')
+        self.assertEqual(validate(Args({**args,'currency':'SDG'}))['currency'],'SDG')
+        for invalid in ['EUR','','SDG&Currency=USD']:
+            with self.assertRaises(ValueError):validate(Args({**args,'currency':invalid}))
+        for id in SEARCH['airlines']:
+            query=parse_qs(urlsplit(booking_url(id,{**SEARCH,'currency':'SDG'})).query)
+            self.assertEqual(query['Currency'],['SDG'])
+
     def test_round_trip_link_keeps_dates_and_passenger_counts(self):
         query=parse_qs(urlsplit(booking_url('badr',{**SEARCH,'round':True,'returnDate':'2026-10-28','passengers':3})).query)
         self.assertEqual(query['InboundDate'],['2026-10-28'])

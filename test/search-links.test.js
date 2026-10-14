@@ -15,6 +15,14 @@ test('passes the actual route, date and adult count using Zenith fields',()=>{
  assert.equal(url.searchParams.get('TravelerTypes[2].Value'),'0');
  assert.equal(url.searchParams.get('mode'),'iframe');
  assert.equal(url.searchParams.has('InboundDate'),false);
+ assert.equal(url.searchParams.get('Currency'),'USD');
+});
+test('uses Sudanese pounds in every airline booking link',()=>{
+ for(const id of ['tarco','badr','sudanair']){
+  const url=new URL(build(id,{...search,currency:'SDG'}));
+  assert.equal(url.searchParams.get('Currency'),'SDG');
+ }
+ for(const currency of ['EUR','','SDG&Currency=USD'])assert.throws(()=>build('badr',{...search,currency}));
 });
 test('preserves round-trip details for all three airline tenants',()=>{
  for(const id of ['tarco','badr','sudanair']){

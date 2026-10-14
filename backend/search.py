@@ -11,6 +11,7 @@ PROVIDERS = {
     'sudanair': {'name': 'سودانير', 'base': 'https://emea.ttinteractive.com/Zenith/FrontOffice/SudanAirways/en-GB'},
 }
 AIRPORTS = {'PZU', 'CAI', 'JED', 'RUH', 'DXB', 'SHJ', 'ADD', 'EBB', 'DOH', 'KRT'}
+CURRENCIES = {'USD', 'SDG'}
 
 def validate(args):
     origin, destination = args.get('from', ''), args.get('to', '')
@@ -28,6 +29,9 @@ def validate(args):
     trip = args.get('trip', 'oneway')
     if trip not in {'oneway', 'round'}:
         raise ValueError('نوع الرحلة غير صحيح.')
+    currency = args.get('currency', 'USD')
+    if currency not in CURRENCIES:
+        raise ValueError('اختر الدولار الأمريكي أو الجنيه السوداني.')
     back = None
     if trip == 'round':
         try:
@@ -39,11 +43,14 @@ def validate(args):
     selected = list(dict.fromkeys(args.getlist('airline')))
     if not selected or len(selected) > 3 or any(a not in PROVIDERS for a in selected):
         raise ValueError('اختر شركة طيران واحدة على الأقل من الشركات الثلاث.')
-    return {'from': origin, 'to': destination, 'date': date.isoformat(), 'returnDate': back.isoformat() if back else None, 'passengers': adults, 'round': trip == 'round', 'airlines': selected}
+    return {'from': origin, 'to': destination, 'date': date.isoformat(), 'returnDate': back.isoformat() if back else None, 'passengers': adults, 'round': trip == 'round', 'airlines': selected, 'currency': currency}
 
 def booking_url(airline, search):
     provider = PROVIDERS[airline]
-    params = {'OriginAirportCode': search['from'], 'DestinationAirportCode': search['to'], 'OutboundDate': search['date'], 'Currency': 'USD'}
+    currency = search.get('currency', 'USD')
+    if currency not in CURRENCIES:
+        raise ValueError('Invalid currency.')
+    params = {'OriginAirportCode': search['from'], 'DestinationAirportCode': search['to'], 'OutboundDate': search['date'], 'Currency': currency}
     if search['round']:
         params['InboundDate'] = search['returnDate']
     for index, (code, count) in enumerate([('AD', search['passengers']), ('CHD', 0), ('INF', 0)]):
@@ -54,9 +61,12 @@ def booking_url(airline, search):
 # Restrict parsing to flight rows below the date calendar. A neighbouring day's
 # "From $..." is not an offer for the requested date. Fail closed on UI changes.
 ROW = re.compile(r'(?m)^([A-Z]{3})\s*\n(\d{2}:\d{2})\s*\nstraight\s*\n([A-Z]{3})\s*\n(\d{2}:\d{2})(?:\s+(plus_one))?\s*\nTravel time\s*\n([^\n]+)\s*\nFlight connection\s*\n([^\n]+)')
-MONEY = re.compile(r'\$\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(\.\d{2})?')
+MONEY = re.compile(r'(\$|USD\b|SDG\b|ج\.س\.)\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*(\.\d{1,2})?')
 
 def parse_results(text, search):
+    requested_currency = search.get('currency', 'USD')
+    if requested_currency not in CURRENCIES:
+        raise ValueError('Invalid currency.')
     text = text.replace('\xa0', ' ').replace('\r', '')
     matches = list(ROW.finditer(text))
     flights = []
@@ -73,14 +83,17 @@ def parse_results(text, search):
         price_match = MONEY.search(tail)
         if not price_match:
             raise ValueError('The flight row has no readable fare.')
-        amount = price_match.group(1).replace(',', '')
-        fraction = price_match.group(2)
+        currency = 'USD' if price_match.group(1) in {'$', 'USD'} else 'SDG'
+        if currency != requested_currency:
+            return {'status': 'currency_unavailable', 'flights': []}
+        amount = price_match.group(2).replace(',', '')
+        fraction = price_match.group(3)
         if fraction and '.' not in amount:
             amount += fraction
         price = Decimal(amount)
         if not price.is_finite() or price < 0:
             raise ValueError('Invalid source fare.')
-        flights.append({'from': origin, 'to': destination, 'date': date, 'leg': leg, 'departure': departure, 'arrival': arrival, 'arrivalDayOffset': int(bool(next_day)), 'duration': duration.strip(), 'connection': connection.strip(), 'price': float(price), 'currency': 'USD', 'priceScope': 'source_displayed'})
+        flights.append({'from': origin, 'to': destination, 'date': date, 'leg': leg, 'departure': departure, 'arrival': arrival, 'arrivalDayOffset': int(bool(next_day)), 'duration': duration.strip(), 'connection': connection.strip(), 'price': float(price), 'currency': currency, 'priceScope': 'source_displayed'})
     if flights:
         return {'status': 'ok', 'flights': flights}
     if re.search(r'(?m)^No results\s*$', text):
