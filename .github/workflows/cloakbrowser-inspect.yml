@@ -18,69 +18,27 @@ jobs:
       - name: Inspect booking pages with CloakBrowser
         shell: bash
         run: |
-          xvfb-run -a python3 - <<'PY'
-          import json, pathlib, re, hashlib
-          from urllib.parse import urlsplit
+          python3 - <<'PY'
+          import json,re,pathlib
           from cloakbrowser import launch
-          from cloakbrowser import __version__
-          root=pathlib.Path("cloak-inspection");root.mkdir()
-          sources={
-           "tarco_site":"https://www.tarcoaviation.com/TarcoAviation/book-a-flight.html",
-           "badr_site":"https://www.badrairlines.com/en/booking.php",
-           "sudanair_site":"https://www.sudanair.com/index.php",
-           "tarco_entry":"https://fo-emea.ttinteractive.com/Zenith/FrontOffice/tarcoair/en-GB",
-          "badr_entry":"https://fo-emea.ttinteractive.com/Zenith/FrontOffice/badrairlines/en-GB",
-          "sudanair_entry":"https://emea.ttinteractive.com/Zenith/FrontOffice/SudanAirways/en-GB"
-          }
-          print("CloakBrowser version",__version__,flush=True)
-          browser=launch(headless=False)
+          from urllib.parse import urlsplit
+          def scrub(s):
+           return re.sub(r'\(S\([^)]*\)\)', '(S([redacted]))',s)
+          browser=launch(headless=True)
           try:
-           for name,url in sources.items():
-            context=browser.new_context(locale="en-GB")
-            page=context.new_page()
-            requests=[]
-            def record(response):
-             if response.request.resource_type in ["xhr","fetch"]:
-              requests.append({"path":urlsplit(response.url).path,"status":response.status,"method":response.request.method})
-            page.on("response",record)
-            try:
-             response=page.goto(url,wait_until="domcontentloaded",timeout=45000)
-             page.wait_for_timeout(5000)
-             info=page.evaluate("""() => ({
-              title:document.title,
-              iframes:Array.from(document.querySelectorAll("iframe"),e=>e.src),
-              bookingLinks:Array.from(document.querySelectorAll("a[href]"),e=>e.href).filter(u=>/ttinteractive|book/i.test(u)),
-              text:document.body.innerText.slice(0,6000),
-              forms:Array.from(document.forms,f=>({action:f.getAttribute('action'),method:f.method,id:f.id})),
-              fields:Array.from(document.querySelectorAll('input:not([type=hidden]),select,button'),e=>({
-                tag:e.tagName,id:e.id,name:e.name,type:e.type,
-                options:e.tagName==='SELECT'?Array.from(e.options,o=>({value:o.value,text:o.text})):undefined
-              })),
-              scripts:Array.from(document.scripts,s=>s.src).filter(Boolean)
-             })""")
-             info.update({"frames":[{"url":f.url,"forms":f.locator("form").count()} for f in page.frames],"source":name,"status":response.status if response else None,"requests":requests})
-             print(json.dumps(info),flush=True)
-             (root/(name+".json")).write_text(json.dumps(info))
-             html=page.content()
-             html=re.sub(r'(?is)<input[^>]*type=["\x27]hidden["\x27][^>]*>','<!-- hidden field removed -->',html)
-             html=re.sub(r'(?i)(token|sessionid|session_id)\s*[:=]\s*["\x27][^"\x27]+["\x27]',r'\1="[redacted]"',html)
-             (root/(name+".html")).write_text(html)
-             page.screenshot(path=str(root/(name+".png")),full_page=True)
-             for src in info["scripts"]:
-              if urlsplit(src).hostname!=urlsplit(url).hostname:continue
-              try:
-               result=context.request.get(src,timeout=20000)
-               if result.ok:
-                js=result.text()
-                if len(js)<3000000:
-                 path=root/(name+"-"+hashlib.sha256(src.encode()).hexdigest()[:8]+".js")
-                 path.write_text(js)
-                 matches=re.findall(r'https?://[^\s"\x27<>]+ttinteractive[^\s"\x27<>]*|[^\s"\x27<>]*BookingEngine/[^\s"\x27<>]*',js)
-                 if matches:print(json.dumps({"source":name,"script":urlsplit(src).path,"bookingPaths":[m[:350] for m in matches[:40]]}),flush=True)
-              except Exception:pass
-            except Exception as exc:
-             print(json.dumps({"source":name,"error":type(exc).__name__,"message":str(exc)[:500]}),flush=True)
-            finally:context.close()
+           page=browser.new_page(locale="en-GB")
+           r=page.goto("https://fo-emea.ttinteractive.com/Zenith/FrontOffice/tarcoair/en-GB",wait_until="domcontentloaded",timeout=45000)
+           page.wait_for_timeout(5000)
+           info=page.evaluate("""() => ({
+           title:document.title,text:document.body.innerText.slice(0,2500),
+           inputs:Array.from(document.querySelectorAll('input:not([type=hidden])'),e=>e.outerHTML),
+           appRoots:Array.from(document.querySelectorAll('*')).filter(e=>e.__vue_app__).map(e=>({tag:e.tagName,id:e.id,keys:Object.keys(e.__vue_app__._instance?.proxy||{})})),
+           snippets:Array.from(document.scripts).filter(s=>!s.src).flatMap(s=>{
+            const text=s.textContent;return ['SearchResult','searchFlights','searchFlight','originInput','departureAirportCode','createApp'].map(k=>{const i=text.indexOf(k);return i<0?null:{marker:k,text:text.slice(Math.max(0,i-1000),i+4500)}}).filter(Boolean)
+           })
+          })""")
+           info["status"]=r.status
+           print("INSPECTION_JSON "+scrub(json.dumps(info)),flush=True)
           finally:browser.close()
           
           PY
