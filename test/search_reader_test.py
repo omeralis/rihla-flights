@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.search import search_airlines
+from backend.search import parse_results, search_airlines
 
 
 SEARCH = {'from': 'PZU', 'to': 'CAI', 'date': '2026-10-21', 'returnDate': None,
@@ -21,6 +21,8 @@ class FakePage:
     def __init__(self, browser):
         self.browser = browser
         self.behavior = {}
+        self.settled = False
+        self.settle_calls = []
 
     async def goto(self, url, **kwargs):
         provider = 'sudanair' if '/SudanAirways/' in url else 'badr' if '/badrairlines/' in url else 'tarco'
@@ -41,10 +43,18 @@ class FakePage:
     async def title(self):
         return self.behavior.get('title', 'Search result')
 
+    async def wait_for_load_state(self, state, **kwargs):
+        self.settle_calls.append((state, kwargs))
+        self.settled = True
+        if self.behavior.get('settle_error'):
+            raise self.behavior['settle_error']
+
     def locator(self, selector):
         return self
 
     async def inner_text(self):
+        if self.settled and 'body_after_settle' in self.behavior:
+            return self.behavior['body_after_settle']
         return self.behavior.get('body', BODY)
 
 
@@ -179,6 +189,28 @@ class ReaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sources[0]['flights'], [])
         self.assertNotIn('reason', sources[0])
 
+    async def test_fare_rendering_after_flight_row_is_read_after_bounded_settle(self):
+        partial = BODY.split('info_outline', 1)[0]
+        # The early page exposes the result row, but cannot yet supply its fare.
+        with self.assertRaises(ValueError):
+            parse_results(partial, SEARCH)
+        browser = FakeBrowser({'badr': [{'body': partial, 'body_after_settle': BODY}]})
+        sources = await self.read(browser, {**SEARCH, 'airlines': ['badr']})
+        self.assertEqual(sources[0]['status'], 'ok')
+        self.assertEqual(sources[0]['flights'][0]['price'], 270)
+        self.assertEqual(browser.attempts['badr'], 1)
+        state, options = browser.contexts[0].page.settle_calls[0]
+        self.assertEqual(state, 'networkidle')
+        self.assertGreater(options['timeout'], 0)
+        self.assertLessEqual(options['timeout'], 5000)
+
+    async def test_background_network_activity_does_not_reject_ready_fare(self):
+        browser = FakeBrowser({'badr': [{'settle_error': TimeoutError(PRIVATE_ERROR)}]})
+        sources = await self.read(browser, {**SEARCH, 'airlines': ['badr']})
+        self.assertEqual(sources[0]['status'], 'ok')
+        self.assertEqual(browser.attempts['badr'], 1)
+        self.assertNotIn('reason', sources[0])
+
     async def test_source_rejection_of_sar_is_reported_as_unsupported_currency(self):
         text=(Path(__file__).parent/'fixtures'/'badr-sar.txt').read_text()
         browser=FakeBrowser({'badr':[{'title':'Book a new flight','body':text}]})
@@ -188,6 +220,7 @@ class ReaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sources[0]['reason'],'unsupported_currency')
         self.assertEqual(sources[0]['flights'],[])
         self.assertEqual(browser.attempts['badr'],1)
+        self.assertEqual(browser.contexts[0].page.settle_calls, [])
 
     async def test_tarco_alternative_date_is_not_shown_as_requested_date(self):
         text=(Path(__file__).parent/'fixtures'/'tarco-krt-sdg.txt').read_text()

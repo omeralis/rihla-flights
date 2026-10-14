@@ -154,6 +154,19 @@ async def search_airlines(search):
                                 if re.search(r'The currency\s+' + re.escape(search.get('currency', 'SDG')) + r'\s+is not valid', text):
                                     failure('unsupported_currency', status='currency_unavailable')
                                     return result
+                                # Flight labels can render before asynchronous fares.
+                                # Allow a short settle period without requiring every
+                                # background request to finish or extending the deadline.
+                                stage = 'settle'
+                                try:
+                                    await page.wait_for_load_state('networkidle', timeout=remaining_ms(5000))
+                                except Exception:
+                                    pass
+                                stage = 'source_check'
+                                text = await page.locator('body').inner_text()
+                                if re.search(r'The currency\s+' + re.escape(search.get('currency', 'SDG')) + r'\s+is not valid', text):
+                                    failure('unsupported_currency', status='currency_unavailable')
+                                    return result
                                 if (await page.title()).strip().lower() != 'search result':
                                     failure('unexpected_page', status='unrecognized')
                                     return result
