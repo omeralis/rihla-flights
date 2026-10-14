@@ -25,10 +25,12 @@ jobs:
           from cloakbrowser import __version__
           root=pathlib.Path("cloak-inspection");root.mkdir()
           sources={
-           "tarco":"https://fo-emea.ttinteractive.com/zenith/frontoffice/tarcoair/en-GB/BookingEngine/SearchFlights",
-           "badr":"https://fo-emea.ttinteractive.com/Zenith/FrontOffice/badrairlines/en-GB/BookingEngine/SearchFlights",
-           "sudanair":"https://emea.ttinteractive.com/Zenith/FrontOffice/SudanAirways/en-GB/BookingEngine/SearchFlights",
-           "tarco_root":"https://fo-emea.ttinteractive.com/Zenith/FrontOffice"
+           "tarco_site":"https://www.tarcoaviation.com/TarcoAviation/book-a-flight.html",
+           "badr_site":"https://www.badrairlines.com/en/booking.php",
+           "sudanair_site":"https://www.sudanair.com/index.php",
+           "tarco_entry":"https://fo-emea.ttinteractive.com/Zenith/FrontOffice/tarcoair/en-GB",
+          "badr_entry":"https://fo-emea.ttinteractive.com/Zenith/FrontOffice/badrairlines/en-GB",
+          "sudanair_entry":"https://emea.ttinteractive.com/Zenith/FrontOffice/SudanAirways/en-GB"
           }
           print("CloakBrowser version",__version__,flush=True)
           browser=launch(headless=False)
@@ -46,6 +48,8 @@ jobs:
              page.wait_for_timeout(5000)
              info=page.evaluate("""() => ({
               title:document.title,
+              iframes:Array.from(document.querySelectorAll("iframe"),e=>e.src),
+              bookingLinks:Array.from(document.querySelectorAll("a[href]"),e=>e.href).filter(u=>/ttinteractive|book/i.test(u)),
               text:document.body.innerText.slice(0,6000),
               forms:Array.from(document.forms,f=>({action:f.getAttribute('action'),method:f.method,id:f.id})),
               fields:Array.from(document.querySelectorAll('input:not([type=hidden]),select,button'),e=>({
@@ -54,7 +58,7 @@ jobs:
               })),
               scripts:Array.from(document.scripts,s=>s.src).filter(Boolean)
              })""")
-             info.update({"source":name,"status":response.status if response else None,"requests":requests})
+             info.update({"frames":[{"url":f.url,"forms":f.locator("form").count()} for f in page.frames],"source":name,"status":response.status if response else None,"requests":requests})
              print(json.dumps(info),flush=True)
              (root/(name+".json")).write_text(json.dumps(info))
              html=page.content()
@@ -71,6 +75,8 @@ jobs:
                 if len(js)<3000000:
                  path=root/(name+"-"+hashlib.sha256(src.encode()).hexdigest()[:8]+".js")
                  path.write_text(js)
+                        matches=re.findall(r'https?://[^\\s"\\x27<>]+ttinteractive[^\\s"\\x27<>]*|[^\\s"\\x27<>]*BookingEngine/[^\\s"\\x27<>]*',js)
+                        if matches:print(json.dumps({"source":name,"script":urlsplit(src).path,"bookingPaths":[m[:350] for m in matches[:40]]}),flush=True)
               except Exception:pass
             except Exception as exc:
              print(json.dumps({"source":name,"error":type(exc).__name__,"message":str(exc)[:500]}),flush=True)
