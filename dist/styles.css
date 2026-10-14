@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
-:root{--ink:#142f46;--muted:#647588;--paper:#f4f7fb;--accent:#12b79d;--mint:#65e3c5;--border:#e2e9f0;--navy:#102b43;--white:#fff;--shadow:0 16px 50px #183b5510}
+:root{--ink:#142f46;--muted:#647588;--paper:#f3f7fa;--accent:#087f72;--mint:#65e3c5;--border:#e2e9f0;--navy:#102b43;--white:#fff;--shadow:0 16px 50px #183b5510;--tarco:#ba2940;--badr:#344584;--sudanair:#245b91}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;scroll-padding-top:24px}
 body{margin:0;min-height:100dvh;display:flex;flex-direction:column;background:var(--paper);color:var(--ink);font-family:'IBM Plex Sans Arabic',Tahoma,Arial,sans-serif;font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
@@ -121,10 +121,13 @@ main{width:100%;max-width:1256px;padding:0 32px;margin:0 auto;flex:1}
 .back{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:8px 13px;border:1px solid var(--border);border-radius:100px;background:white;min-height:38px}
 .back:hover{color:var(--ink);border-color:#bdcedb}
 .back span{font-size:18px;line-height:1}
-.results-heading{display:flex;align-items:center;justify-content:space-between;gap:22px;margin:28px 0 23px}
+.results-heading{position:relative;isolation:isolate;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:22px;margin:28px 0 23px;padding:28px 36px;min-height:180px;border:1px solid #20526b;border-radius:24px;background:linear-gradient(115deg,#12626a 0%,#173f58 45%,#102b43 100%);color:white;box-shadow:0 14px 32px #123e5810}
+.results-heading:before{content:'';position:absolute;z-index:-1;inset-inline-end:-70px;top:-150px;width:370px;height:370px;border:1px solid #b4f1e826;border-radius:50%;box-shadow:0 0 0 42px #b4f1e808,0 0 0 84px #b4f1e806;pointer-events:none}
+.results-heading .eyebrow{color:#c3eee5}
+.results-heading .eyebrow i{background:var(--mint);box-shadow:0 0 0 4px #65e3c517}
 .results-heading h1{font-size:38px;font-weight:600;letter-spacing:-1.3px;line-height:1.5;margin:10px 0 8px}
-.results-heading p{color:var(--muted);font-size:12px;line-height:1.9;margin:0}
-.results-symbol{width:78px;height:78px;border-radius:23px;background:#e5f6f1;color:#189b81;font-size:38px;display:grid;place-items:center;flex-shrink:0;transform:rotate(-10deg)}
+.results-heading p{color:#d2e5ed;font-size:12px;line-height:1.9;margin:0}
+.results-symbol{width:78px;height:78px;border-radius:23px;background:#ffffff12;border:1px solid #bcefe73d;color:#a2efdf;font-size:38px;display:grid;place-items:center;flex-shrink:0;transform:rotate(-10deg);box-shadow:inset 0 1px 0 #ffffff18}
 .results-note{display:flex;align-items:center;gap:12px;font-size:12px;line-height:1.8;color:#506c84;border:1px solid #d9e8f3;border-radius:11px;padding:13px 17px;background:#ecf4fa;margin-bottom:29px}
 .results-note p{margin:0}
 .note-icon{display:grid;place-items:center;width:22px;height:22px;border:1px solid #89adc9;border-radius:50%;font:600 12px Arial,sans-serif;color:#48799d;flex-shrink:0}
@@ -186,6 +189,34 @@ main{width:100%;max-width:1256px;padding:0 32px;margin:0 auto;flex:1}
 .official-link{font-size:12px;min-height:42px}
 .source-card .official-link{background:#edf6f5;color:#237968;padding:9px 14px;border-radius:8px}
 .source-card .official-link:hover{background:#e0f2ea}
+/* Carrier palettes follow the red/blue, indigo/blue and blue/gold logos. */
+.flight-card[data-airline=tarco],.partner.tarco,label:has(input[value=tarco]){--carrier-ink:var(--tarco);--carrier-hover:#972138;--carrier-accent:#c53c52;--carrier-soft:#fff3f5;--carrier-border:#efd0d7;--carrier-mark:#fce2e7;--carrier-band:#fff6f7}
+.flight-card[data-airline=badr],.partner.badr,label:has(input[value=badr]){--carrier-ink:var(--badr);--carrier-hover:#253567;--carrier-accent:#5379bb;--carrier-soft:#f0f4ff;--carrier-border:#cdd8f0;--carrier-mark:#dee9ff;--carrier-band:#f2f6ff}
+.flight-card[data-airline=sudanair],.partner.sudanair,label:has(input[value=sudanair]){--carrier-ink:var(--sudanair);--carrier-hover:#174572;--carrier-accent:#c89b32;--carrier-soft:#fff9ec;--carrier-border:#ead9ad;--carrier-mark:#f5e6bd;--carrier-band:#fff9ed}
+.flight-card[data-airline]{border-color:var(--carrier-border);border-inline-start:4px solid var(--carrier-accent);background:linear-gradient(110deg,var(--carrier-soft),#fff 45%);transition:border-color .2s,box-shadow .2s,transform .2s}
+.flight-card[data-airline]:hover,.flight-card[data-airline]:focus-within{border-color:var(--carrier-accent);box-shadow:0 9px 25px #173b5810;transform:translateY(-2px)}
+.flight-card[data-airline] .flight-top{background:linear-gradient(110deg,var(--carrier-mark),var(--carrier-band) 70%);border-bottom-color:var(--carrier-border)}
+.flight-card[data-airline] .airline-name,.source-card[data-airline] h2{color:var(--carrier-ink)}
+.flight-card[data-airline] .airline-mark{background:var(--carrier-ink);color:white;border:1px solid #ffffff33;box-shadow:0 2px 6px #173b5810}
+.flight-card[data-airline] .flight-top>span{background:#ffffffbf;color:#4d6275;border:1px solid #ffffffb3}
+.flight-card[data-airline] .flight-bottom{background:var(--carrier-band);border-top-color:var(--carrier-border)}
+.flight-card[data-airline] .journey-plane{color:var(--carrier-ink)}
+.flight-card[data-airline] .official-link{background:var(--carrier-ink);color:white;box-shadow:0 3px 8px #183b5510}
+.flight-card[data-airline] .official-link:hover{background:var(--carrier-hover);box-shadow:0 6px 14px #183b551a}
+.flight-card[data-airline] .official-link:active{transform:translateY(0);box-shadow:0 2px 6px #183b5510}
+.partner{color:var(--carrier-ink);border-color:var(--carrier-border);background:linear-gradient(115deg,var(--carrier-soft),#fff 85%)}
+.partner .partner-code{color:var(--carrier-ink);background:var(--carrier-mark);border:1px solid var(--carrier-border)}
+.airline-options label,.filter-section label:has(.air-filter){transition:background .2s,border-color .2s,color .2s,box-shadow .2s}
+.airline-options input,.filter-section .air-filter{accent-color:var(--carrier-ink)}
+.airline-options label:has(input:checked){background:var(--carrier-soft);border-color:var(--carrier-border);color:var(--carrier-ink)}
+.airline-options label:hover,.filter-section label:has(.air-filter:not(:disabled)):hover{background:var(--carrier-soft);border-color:var(--carrier-accent)}
+.filter-section label:has(.air-filter){border:1px solid transparent;border-radius:8px;padding-inline:10px;margin-block:3px}
+.filter-section label:has(.air-filter:checked){color:var(--carrier-ink);background:var(--carrier-soft);border-color:var(--carrier-border)}
+.filter-section label:has(.air-filter:checked) span{color:var(--carrier-ink);background:var(--carrier-mark)}
+.airline-options label:focus-within,.filter-section label:has(.air-filter):focus-within{outline:2px solid var(--carrier-ink);outline-offset:3px}
+.primary:active,.retry:active:not(:disabled){transform:translateY(1px)}
+.currency-picker select:hover:not(:disabled),.filter-section select:hover:not(:disabled){border-color:#91bfb8;background:#f6fcfa}
+.currency-picker select:focus-visible,.filter-section select:focus-visible{outline-color:var(--accent)}
 .empty-state{padding:50px 24px;border:1px solid var(--border);border-radius:16px;background:white;text-align:center;font-size:14px;color:var(--muted)}
 .loading-state:before{content:'';display:block;width:29px;height:29px;border:3px solid #dff4ec;border-top-color:var(--accent);border-radius:50%;margin:0 auto 17px;animation:spin .85s linear infinite}
 @keyframes arrive{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
@@ -212,6 +243,7 @@ main{width:100%;max-width:1256px;padding:0 32px;margin:0 auto;flex:1}
  .results-main{padding-top:12px;padding-bottom:30px}.back{font-size:11px;min-height:36px;padding:6px 11px}.results-heading{gap:15px;margin:21px 0 19px;align-items:start}.results-heading h1{font-size:clamp(24px,7vw,31px);letter-spacing:-.9px;line-height:1.55;margin:9px 0 8px}.results-heading .eyebrow{font-size:9px;gap:6px}.results-heading p{font-size:10px;line-height:1.95}.results-symbol{width:46px;height:46px;border-radius:14px;font-size:24px;margin-top:28px}.results-note{font-size:10px;padding:12px;gap:10px;align-items:start;border-radius:10px;margin-bottom:20px}.note-icon{width:19px;height:19px;font-size:10px;margin-top:2px}.results-layout{gap:21px}.filters{display:block;padding:17px;border-radius:13px}.filters-title{margin-bottom:12px}.filters-title h2{font-size:15px}.filters-title>span{font-size:19px}.filter-section{padding:13px 0}.filter-section:has(.air-filter){display:flex;justify-content:space-between;gap:7px}.filter-section h3{font-size:11px;margin-bottom:4px}.filter-section label{font-size:12px;padding:7px 0;min-height:35px;gap:7px}.filter-section:has(#currency-filter){display:flex;align-items:center;gap:14px;padding-bottom:0}.filter-section label.currency-label{font-size:11px;white-space:nowrap;margin:0}.filter-section select{width:auto;flex:1;font-size:11px;min-height:40px;max-width:235px}.results-toolbar{gap:12px;margin-bottom:11px;font-size:12px;align-items:start}.toolbar-actions{justify-content:space-between;width:100%;gap:8px;font-size:10px}.results-toolbar select{font-size:10px;padding:6px 3px}.retry{font-size:10px;padding:7px 10px}.source-summary{font-size:10px;line-height:1.9;margin-bottom:12px}.flight-card{border-radius:13px;margin-bottom:14px}.flight-top{padding:13px 16px;gap:12px}.airline-name{font-size:16px;gap:8px}.airline-mark{width:30px;height:30px;border-radius:8px;font-size:9px}.flight-top>span{font-size:8px;max-width:180px;padding:5px 8px;line-height:1.8}.flight-body{padding:18px 16px;flex-direction:column;align-items:stretch;gap:18px}.flight-route{width:100%;gap:10px;flex:none}.airport{min-width:59px}.airport strong{font-size:26px}.airport span{font-size:11px}.airport small{font-size:9px}.journey{font-size:9px;max-width:110px;min-width:62px}.route-line{margin:8px 0}.route-line span{font-size:18px;padding:0 7px}.price-box{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;align-items:center;width:100%;min-width:0;padding:16px 0 0;border-inline-start:0;border-top:1px dashed #d5e1e9;text-align:start}.price-box strong{font-size:24px;line-height:1.5;grid-column:1;letter-spacing:-.7px}.price-box small{font-size:8px;grid-column:1;margin:2px 0 0}.price-box .primary{grid-column:2;grid-row:1/3;width:auto;font-size:10px;padding:9px 11px;min-height:42px}.flight-bottom{padding:10px 16px;gap:6px 16px;font-size:8px}.source-body{padding:19px 16px}.source-body h2{font-size:16px}.source-body p{font-size:11px}.source-card .official-link{font-size:11px;min-height:40px}.empty-state{font-size:12px;padding:38px 20px}
 }
 @media(max-width:370px){.header{padding-inline:16px;gap:8px}.language{display:none}.hero{padding-inline:19px}.hero-foot{font-size:8px;gap:8px}.hero h1{font-size:29px}.search-panel{margin-inline:4px;padding-inline:12px}.field{padding-inline:8px}.field select{font-size:11px}.price-box strong{font-size:21px}.price-box .primary{font-size:9px;padding:9px}.footer-brand p{font-size:8px}}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}.flight-card:hover,.flight-card:focus-within,.primary:hover,.primary:active,.retry:active,.swap:hover{transform:none!important}}
+@media(forced-colors:active){.results-heading,.flight-card[data-airline],.partner,.filter-section label:has(.air-filter:checked),.airline-options label:has(input:checked){background:Canvas;color:CanvasText;border-color:CanvasText}.results-heading .eyebrow,.results-heading p,.results-symbol,.flight-card[data-airline] .airline-name,.source-card[data-airline] h2{color:CanvasText}.flight-card[data-airline] .official-link{background:ButtonFace;color:ButtonText;border:1px solid ButtonText}.results-heading:before{display:none}}
 
 .field>span>span,.search-button>span,.partner-arrow,.ticket-arrow,.ticket-path>span,.creator-link>span{display:inline-flex;align-items:center}.journey-plane{width:20px;height:20px;margin:0 9px;transform:rotate(-90deg);color:#74a6bd}.official-link>svg{width:14px;height:14px;flex-shrink:0}.price-box .official-link{gap:7px}@media(max-width:650px){.journey-plane{width:18px;height:18px;margin-inline:7px}}

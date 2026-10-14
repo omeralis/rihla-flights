@@ -2,7 +2,7 @@ name: Verify CloakBrowser live search
 on:
   workflow_dispatch:
   push:
-    branches: [live-cloakbrowser-search, sdg-currency, modern-interface, currency-reliability]
+    branches: [live-cloakbrowser-search, sdg-currency, modern-interface, currency-reliability, wisal-brand]
   pull_request:
 permissions:
   contents: read

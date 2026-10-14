@@ -53,7 +53,7 @@ if(list){
   list.setAttribute('aria-busy',String(loading));
   list.replaceChildren();const selected=filters.filter(e=>e.checked).map(e=>e.value);
   if(loading){count.textContent='جارٍ البحث لدى الشركات…';summary.textContent='قد يستغرق البحث حتى دقيقة. نقرأ صفحات الشركات الآن.';list.append(el('div','empty-state loading-state','جارٍ البحث عن رحلاتك…'));return}
-  if(failure){count.textContent='تعذّر إكمال البحث';summary.textContent=failure;selected.forEach(id=>{const box=el('article','flight-card source-card');const body=el('div','source-body');body.append(el('h2','',providers[id].name),link(id,`تابع البحث لدى ${providers[id].name} ↗`));box.append(body);list.append(box)});return}
+  if(failure){count.textContent='تعذّر إكمال البحث';summary.textContent=failure;selected.forEach(id=>{const box=el('article','flight-card source-card');box.dataset.airline=id;const body=el('div','source-body');body.append(el('h2','',providers[id].name),link(id,`تابع البحث لدى ${providers[id].name} ↗`));box.append(body);list.append(box)});return}
   if(!selected.length){count.textContent='اختر شركة';summary.textContent='اختر شركة طيران واحدة على الأقل لعرض النتائج.';return}
   if(!responseData)return;
   const sourceList=responseData.sources.filter(s=>selected.includes(s.id));
@@ -77,7 +77,7 @@ if(list){
   }
   for(const source of sourceList){
    if(source.status==='ok')continue;
-   const box=el('article','flight-card source-card'),body=el('div','source-body');
+   const box=el('article','flight-card source-card'),body=el('div','source-body');box.dataset.airline=source.id;
    const message=source.status==='no_results'?'لم يعرض المصدر رحلات للتاريخ والمسار المختارين.':source.status==='currency_unavailable'?source.reason==='unsupported_currency'?`هذه الشركة لا تدعم البحث بعملة ${currencies[search.currency]}. اختر عملة أخرى.`:`لم يعرض المصدر سعرًا بعملة ${currencies[search.currency]}. جرّب عملة أخرى أو راجع الشركة.`:source.status==='blocked'?source.httpStatus===429?'الشركة تحدّ عدد طلبات البحث. انتظر قليلًا أو تابع البحث في موقعها مباشرة.':'رفض موقع الشركة اتصال خدمة البحث. تابع البحث في موقع الشركة مباشرة.':source.reason?.includes('timeout')?'استغرق رد الشركة وقتًا طويلًا. حاول تحديث البحث أو افتح موقع الشركة.':source.status==='unrecognized'?source.reason==='query_mismatch'?'أعادت الشركة نتائج لا تطابق تاريخ أو مسار البحث. راجع نتائجها في موقع الشركة مباشرة.':'لم نستطع التحقق من بيانات صفحة الشركة. راجع النتائج في موقعها مباشرة.':'تعذّر الاتصال بالشركة. حاول تحديث البحث أو افتح موقعها مباشرة.';
    body.append(el('h2','',providers[source.id].name),el('p','',message),link(source.id,'افتح نتائج الشركة ↗'));box.append(body);list.append(box);
   }
