@@ -1,0 +1,41 @@
+name: Verify live Wisal production
+on:
+  push:
+    branches: [verify-wisal-production]
+permissions:
+  contents: read
+jobs:
+  verify-production:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check deployed branding and live flight results
+        run: |
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          from urllib.request import urlopen
+          from urllib.parse import urlencode
+          base='https://rihla-flights.vercel.app'
+          for path,file in [('/','index.html'),('/results.html','results.html'),('/styles.css','styles.css'),('/app.js','app.js')]:
+              with urlopen(base+path,timeout=30) as r:
+                  text=r.read().decode()
+                  assert r.status==200
+              assert text==Path('dist/'+file).read_text(),file
+              if file.endswith('.html'):assert 'WISAL' in text and 'وصال' in text and '@omerali.dev' in text
+              print('DEPLOYED_ASSET '+json.dumps({'file':file,'status':200,'sha256':hashlib.sha256(text.encode()).hexdigest()}),flush=True)
+          for destination,date,currency in [('KRT','2026-10-18','SDG'),('CAI','2026-10-21','SAR'),('CAI','2026-10-21','USD')]:
+              params={'from':'PZU','to':destination,'date':date,'passengers':1,'trip':'oneway','airline':['tarco','badr','sudanair']}
+              if currency!='SDG':params['currency']=currency
+              with urlopen(base+'/api/search?'+urlencode(params,doseq=True),timeout=100) as r:data=json.load(r)
+              assert data['search']['currency']==currency
+              flights=[f for source in data['sources'] for f in source['flights']]
+              assert flights,data
+              assert all(f['from']=='PZU' and f['to']==destination and f['date']==date and f['currency']==currency for f in flights),data
+              if currency=='SAR':assert any(s['id']=='badr' and s['status']=='currency_unavailable' for s in data['sources'])
+              print('LIVE_RESULTS '+json.dumps({'to':destination,'date':date,'currency':currency,'flights':len(flights),'sources':[{'id':s['id'],'status':s['status'],'reason':s.get('reason'),'fares':[f['price'] for f in s['flights']]} for s in data['sources']]}),flush=True)
+          print('Live Wisal production verification passed.')
+          PY
