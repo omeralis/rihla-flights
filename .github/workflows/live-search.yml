@@ -41,6 +41,33 @@ jobs:
                   assert f['price']>=0 and f['priceScope']=='source_displayed'
           print(json.dumps(data))
           PY
+      - name: Verify the two pages in CloakBrowser
+        run: |
+          docker exec -i rihla-live python - <<'PY'
+          import re
+          from cloakbrowser import launch
+          browser=launch(headless=True)
+          try:
+           page=browser.new_page()
+           page.goto('http://localhost:3000/',wait_until='domcontentloaded')
+           page.locator('#from').select_option('PZU')
+           page.locator('#to').select_option('CAI')
+           page.locator('#date').fill('2026-10-21')
+           page.get_by_role('button',name=re.compile('ابحث عن رحلات')).click()
+           page.wait_for_url('**/results.html?**')
+           page.wait_for_function("() => document.querySelector('#flight-list .price-box') !== null",timeout=90000)
+           assert page.locator('#route-title').inner_text()=='بورتسودان ← القاهرة'
+           count=page.locator('.price-box').count()
+           assert count>=1
+           page.locator('#sort').select_option('time')
+           for id in ['tarco','badr','sudanair']:
+            page.locator('.air-filter[value="'+id+'"]').uncheck()
+           assert page.locator('.price-box').count()==0
+           assert 'اختر شركة' in page.locator('#source-status').inner_text()
+           print('Browser flow passed: search form, live results, sorting and airline filters; '+str(count)+' live flight cards.')
+          finally:browser.close()
+          
+          PY
       - name: Service logs on failure
         if: failure()
         run: docker logs rihla-live || true
