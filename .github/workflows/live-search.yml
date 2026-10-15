@@ -1,11 +1,19 @@
-name: Verify CloakBrowser live search
+name: Verify Next.js flight search
 on:
-  workflow_dispatch:
   push:
-    branches: [live-cloakbrowser-search, sdg-currency, modern-interface, currency-reliability, wisal-brand]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      live:
+        description: Build the browser container and verify actual airline fares
+        type: boolean
+        default: false
 permissions:
   contents: read
+env:
+  CLOAKBROWSER_VERSION: 146.0.7680.177.5
+  CLOAKBROWSER_AUTO_UPDATE: 'false'
+  NEXT_TELEMETRY_DISABLED: '1'
 jobs:
   verify:
     runs-on: ubuntu-24.04
@@ -14,118 +22,34 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Check source and parsers
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Install browser
         run: |
-          python3 -m unittest discover -s test -p '*_test.py'
-          node test/search-links.test.js
-          node --check dist/app.js
-      - name: Build browser service
-        run: docker build -f Dockerfile.vercel -t rihla-live .
-      - name: Start and check the service
+          npx playwright-core install-deps chromium
+          npm run browser:install
+      - run: npm run test:e2e
+      - name: Build production container
+        if: github.event_name == 'workflow_dispatch' && inputs.live
+        run: docker build -f Dockerfile.vercel -t rihla-next .
+      - name: Verify actual airline fares
+        if: github.event_name == 'workflow_dispatch' && inputs.live
         run: |
-          docker run -d --name rihla-live -p 3000:3000 rihla-live
-          for attempt in $(seq 1 30); do
+          docker run -d --name rihla-next -p 3000:3000 rihla-next
+          for attempt in $(seq 1 60); do
             if curl -sf http://localhost:3000/api/health; then break; fi
             sleep 1
           done
-          for currency in USD SDG SAR; do
-            curl -fsS --max-time 100 "http://localhost:3000/api/search?from=PZU&to=CAI&date=2026-10-21&passengers=1&trip=oneway&airline=tarco&airline=badr&airline=sudanair&currency=$currency" -o "/tmp/live-$currency.json"
-          done
-          python3 - <<'PY'
-          import json
-          for currency in ['USD','SDG','SAR']:
-              data=json.load(open('/tmp/live-'+currency+'.json'))
-              assert data['search']['currency']==currency
-              assert len(data['sources'])==3
-              assert all(s['status'] in (['ok','no_results','currency_unavailable'] if currency=='SAR' else ['ok','no_results']) for s in data['sources']),data
-              assert any(s['flights'] for s in data['sources']),data
-              for source in data['sources']:
-                  assert 'Currency='+currency in source['bookingUrl']
-                  for f in source['flights']:
-                      assert f['from']=='PZU' and f['to']=='CAI' and f['date']=='2026-10-21'
-                      assert f['price']>=0 and f['priceScope']=='source_displayed' and f['currency']==currency
-              print(json.dumps(data))
-          PY
-      - name: Verify the two pages in CloakBrowser
-        run: |
-          docker exec -i rihla-live python - <<'PY'
-          import re
-          from cloakbrowser import launch
-          browser=launch(headless=True)
-          try:
-           page=browser.new_page()
-           page.goto('http://localhost:3000/',wait_until='domcontentloaded')
-           page.locator('#from').select_option('PZU')
-           page.locator('#to').select_option('CAI')
-           page.locator('#date').fill('2026-10-21')
-           page.get_by_role('button',name=re.compile('ابحث عن رحلات')).click()
-           page.wait_for_url('**/results.html?**')
-           page.wait_for_function("() => document.querySelector('#flight-list .price-box') !== null",timeout=90000)
-           assert page.locator('#route-title').inner_text()=='بورتسودان ← القاهرة'
-           count=page.locator('.price-box').count()
-           assert count>=1
-           assert page.locator('#currency-filter').input_value()=='SDG'
-           with page.expect_response(lambda r: '/api/search?' in r.url and 'currency=USD' in r.url,timeout=90000) as usd:
-            page.locator('#currency-filter').select_option('USD')
-           assert usd.value.status==200
-           assert all(f['currency']=='USD' for source in usd.value.json()['sources'] for f in source['flights'])
-           page.wait_for_function("() => !document.querySelector('#currency-filter').disabled",timeout=90000)
-           with page.expect_response(lambda r: '/api/search?' in r.url and 'currency=SAR' in r.url,timeout=90000) as sar:
-            page.locator('#currency-filter').select_option('SAR')
-           assert sar.value.status==200
-           assert any(source['flights'] for source in sar.value.json()['sources'])
-           assert all(f['currency']=='SAR' for source in sar.value.json()['sources'] for f in source['flights'])
-           page.wait_for_function("() => !document.querySelector('#currency-filter').disabled",timeout=90000)
-           assert page.locator('.price-box').count()>=1
-           for price in page.locator('.price-box strong').all_inner_texts():assert 'ر.س' in price
-           assert any(source['id']=='badr' and source['status']=='currency_unavailable' for source in sar.value.json()['sources'])
-           with page.expect_response(lambda r: '/api/search?' in r.url and 'currency=SDG' in r.url,timeout=90000) as result:
-            page.locator('#currency-filter').select_option('SDG')
-           data=result.value.json()
-           assert result.value.status==200 and data['search']['currency']=='SDG'
-           assert all(f['currency']=='SDG' for source in data['sources'] for f in source['flights'])
-           page.wait_for_function("() => !document.querySelector('#currency-filter').disabled",timeout=90000)
-           assert page.locator('.price-box').count()>=1
-           for price in page.locator('.price-box strong').all_inner_texts():assert 'ج.س' in price and 'USD' not in price
-           assert 'currency=SDG' in page.url
-           assert 'currency=SDG' in page.locator('#edit-link').get_attribute('href')
-           for href in page.locator('.official-link').evaluate_all('(links)=>links.map(link=>link.href)'):assert 'Currency=SDG' in href
-           page.set_viewport_size({'width':375,'height':812})
-           assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
-           page.locator('#sort').select_option('time')
-           for id in ['tarco','badr','sudanair']:
-            page.locator('.air-filter[value="'+id+'"]').uncheck()
-           assert page.locator('.price-box').count()==0
-           assert 'اختر شركة' in page.locator('#source-status').inner_text()
-           page.locator('#edit-link').click()
-           page.wait_for_url('**/index.html?**')
-           assert page.locator('#currency').input_value()=='SDG'
-           with page.expect_response(lambda r: '/api/search?' in r.url and 'currency=SDG' in r.url,timeout=90000) as result:
-            page.get_by_role('button',name=re.compile('ابحث عن رحلات')).click()
-           assert result.value.json()['search']['currency']=='SDG'
-           page.wait_for_function("() => !document.querySelector('#currency-filter').disabled",timeout=90000)
-           assert page.locator('.price-box').count()>=1
-           print('Browser flow passed: default SDG and actual USD/SDG/SAR prices, currency switching, links, form persistence, mobile layout and airline filters; '+str(count)+' live flight cards.')
-          finally:browser.close()
-          
-          PY
-      - name: Diagnose browser engine on failure
-        if: failure()
-        run: |
-          docker exec -i rihla-live python - <<'PY'
-          import asyncio,traceback
-          from backend.search import search_airlines
-          search={'from':'PZU','to':'CAI','date':'2026-10-21','passengers':1,'round':False,'currency':'SDG','airlines':['badr']}
-          try:
-              sources=asyncio.run(search_airlines(search))
-              print('ENGINE_DIAGNOSTIC',[(s['id'],s['status']) for s in sources])
-          except Exception as error:
-              print('ENGINE_EXCEPTION',type(error).__name__)
-              for frame in traceback.extract_tb(error.__traceback__):print(frame.name,frame.lineno)
-          PY
-      - name: Service logs on failure
-        if: failure()
-        run: docker logs rihla-live || true
-      - name: Stop service
-        if: always()
-        run: docker rm -f rihla-live || true
+          npm run test:live
+      - name: Container logs on failure
+        if: failure() && github.event_name == 'workflow_dispatch' && inputs.live
+        run: docker logs rihla-next || true
+      - name: Stop container
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.live
+        run: docker rm -f rihla-next || true

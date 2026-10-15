@@ -1,0 +1,31 @@
+{
+  "name": "rihla-flights",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.0.0" },
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "next build",
+    "start": "node scripts/start.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "test:e2e": "tsx test/browser-flow.ts",
+    "test:live": "tsx test/live-search.ts",
+    "browser:install": "cloakbrowser install"
+  },
+  "dependencies": {
+    "cloakbrowser": "0.6.2",
+    "next": "16.4.1",
+    "playwright-core": "^1.56.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
