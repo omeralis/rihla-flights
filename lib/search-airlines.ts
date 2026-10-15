@@ -1,6 +1,7 @@
 import type { Browser, BrowserContext } from 'playwright-core';
-import { bookingUrl, providers, type Airline, type SearchCriteria, type SourceResult } from './search';
+import { bookingUrl, currencyOrder, providers, type Airline, type SearchCriteria, type SourceResult } from './search';
 import { parseResults } from './parse-results';
+import { verifySource } from './verify-source';
 import { rotateProxy, type ProxyRotation } from './rotate-proxy';
 
 class SourceTimeout extends Error { override name = 'TimeoutError'; }
@@ -22,7 +23,7 @@ async function launchBrowser(proxy?: string): Promise<Browser> {
   process.env.CLOAKBROWSER_AUTO_UPDATE ??= 'false';
   process.env.CLOAKBROWSER_VERSION ??= '146.0.7680.177.5';
   const { launch } = await import('cloakbrowser');
-  return launch({ headless: true, ...(proxy ? { proxy: { server: proxy } } : {}) });
+  return launch({ headless: true, locale: 'en-GB', timezone: 'Africa/Khartoum', ...(proxy ? { proxy: { server: proxy } } : {}) });
 }
 
 interface ReaderOptions {
@@ -78,7 +79,9 @@ async function searchRound(search: SearchCriteria, options: ReaderOptions, proxy
   catch (error) { abandoned = true; throw error; }
 
   async function read(id: Airline): Promise<SourceResult> {
-    const result: SourceResult = { id, name: providers[id].name, bookingUrl: bookingUrl(id, search), status: 'unavailable', flights: [] };
+    const result: SourceResult = { id, name: providers[id].name, bookingUrl: bookingUrl(id, search), status: 'unavailable', flights: [], requestedCurrency: search.currency, currency: search.currency, currencyFallback: false, attemptedCurrencies: [] };
+    let activeSearch = search;
+    let useDateTime = false;
     let stage = 'context';
     let context: BrowserContext | undefined;
     let expired = false;
@@ -89,12 +92,13 @@ async function searchRound(search: SearchCriteria, options: ReaderOptions, proxy
       if (httpStatus !== undefined) result.httpStatus = httpStatus;
       if (error) result.errorClass = errorClass(error);
       // Never log browser messages, session URLs, cookies or source page text.
-      console.warn('Airline read failed', { provider: id, currency: search.currency, stage, reason, httpStatus, errorClass: result.errorClass });
+      console.warn('Airline read failed', { provider: id, currency: activeSearch.currency, stage, reason, httpStatus, errorClass: result.errorClass });
     };
-    const unsupported = (text: string) => new RegExp(`The currency\\s+${search.currency}\\s+is not valid`).test(text);
+    const unsupported = (text: string) => new RegExp(`The currency\\s+${activeSearch.currency}\\s+is not valid`).test(text);
 
     async function attemptSearch() {
-      for (let attempt = 0; attempt < 2 && !expired; attempt++) {
+      let attemptLimit = 2;
+      for (let attempt = 0; attempt < attemptLimit && !expired; attempt++) {
         let retryable = false;
         for (const key of ['reason', 'stage', 'httpStatus', 'errorClass'] as const) delete result[key];
         stage = 'context';
@@ -124,13 +128,26 @@ async function searchRound(search: SearchCriteria, options: ReaderOptions, proxy
             if (unsupported(text)) { failure('unsupported_currency', 'currency_unavailable'); return; }
             if ((await page.title()).trim().toLowerCase() !== 'search result') { failure('unexpected_page', 'unrecognized'); return; }
             stage = 'query_check';
-            const requestedDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${search.date}T12:00:00Z`)).replace(/ (\d{4})$/, ', $1');
-            if (!text.includes(search.from) || !text.includes(search.to) || !text.includes(requestedDate)) { failure('query_mismatch', 'unrecognized'); return; }
-            stage = 'parse';
-            if (expired) return;
-            try { Object.assign(result, parseResults(text, search)); }
-            catch (error) { failure('parse_failed', 'unrecognized', undefined, error); }
-            return;
+            const verification = verifySource(text, activeSearch);
+            result.observedDate = verification.observedDate;
+            if (!verification.matches) {
+              result.queryMismatch = verification.mismatch;
+              failure('query_mismatch', 'unrecognized');
+              if (id === 'tarco' && verification.mismatch === 'date' && !useDateTime) {
+                useDateTime = true;
+                result.dateCorrectionAttempted = true;
+                result.bookingUrl = bookingUrl(id, activeSearch, true);
+                attemptLimit = Math.max(attemptLimit, attempt + 2);
+                retryable = true;
+              } else return;
+            } else {
+              delete result.queryMismatch;
+              stage = 'parse';
+              if (expired) return;
+              try { Object.assign(result, parseResults(text, verification.returnVerified ? activeSearch : { ...activeSearch, round: false })); }
+              catch (error) { failure('parse_failed', 'unrecognized', undefined, error); }
+              return;
+            }
           }
         } catch (error) {
           if (expired) return;
@@ -143,12 +160,23 @@ async function searchRound(search: SearchCriteria, options: ReaderOptions, proxy
           context = undefined;
           await cleanup(closing);
         }
-        if (!retryable || attempt === 1 || deadline - Date.now() <= (options.retryDelayMs ?? 500)) break;
+        if (!retryable || attempt + 1 >= attemptLimit || deadline - Date.now() <= (options.retryDelayMs ?? 500)) break;
         await new Promise(resolve => setTimeout(resolve, options.retryDelayMs ?? 500));
       }
     }
 
-    try { await timeout(attemptSearch(), remaining(65_000)); }
+    try {
+      for (const currency of currencyOrder(search.currency)) {
+        if (expired || deadline - Date.now() < 1) break;
+        activeSearch = { ...search, currency };
+        result.currency = currency;
+        result.currencyFallback = currency !== search.currency;
+        result.attemptedCurrencies!.push(currency);
+        result.bookingUrl = bookingUrl(id, activeSearch, useDateTime);
+        await timeout(attemptSearch(), remaining(65_000));
+        if (result.status !== 'currency_unavailable') break;
+      }
+    }
     catch (error) {
       expired = true;
       failure(error instanceof SourceTimeout ? 'source_timeout' : 'read_failed', 'unavailable', undefined, error);

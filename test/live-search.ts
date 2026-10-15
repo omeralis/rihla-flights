@@ -16,7 +16,7 @@ for (const currency of ['USD', 'SDG', 'SAR'] as const) {
   assert.ok(data.sources.some(source => source.flights.length), 'No actual fares were verified for this date');
   for (const source of data.sources) for (const flight of source.flights) {
     assert.equal(flight.from, criteria.from); assert.equal(flight.to, criteria.to); assert.equal(flight.date, date);
-    assert.equal(flight.currency, currency); assert.equal(flight.priceScope, 'source_displayed'); assert.ok(flight.price >= 0);
-    assert.equal(new URL(source.bookingUrl).searchParams.get('Currency'), currency);
+    assert.equal(flight.currency, source.currency ?? currency); assert.equal(flight.priceScope, 'source_displayed'); assert.ok(flight.price >= 0);
+    assert.equal(new URL(source.bookingUrl).searchParams.get('Currency'), flight.currency);
   }
 }

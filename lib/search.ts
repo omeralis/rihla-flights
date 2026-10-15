@@ -50,6 +50,13 @@ export interface SourceResult {
   errorClass?: string;
   connection?: 'direct' | 'proxy';
   proxyAttempts?: number;
+  requestedCurrency?: Currency;
+  currency?: Currency;
+  currencyFallback?: boolean;
+  attemptedCurrencies?: Currency[];
+  observedDate?: string;
+  queryMismatch?: 'date' | 'route' | 'unverified';
+  dateCorrectionAttempted?: boolean;
 }
 export interface SearchResponse { search: SearchCriteria; sources: SourceResult[]; checkedAt: string }
 
@@ -84,20 +91,29 @@ export function searchParams(search: SearchCriteria): URLSearchParams {
   return params;
 }
 
-export function bookingUrl(id: Airline, search: SearchCriteria): string {
+export function bookingUrl(id: Airline, search: SearchCriteria, dateTime = false): string {
   if (!Object.hasOwn(providers, id) || !Object.hasOwn(currencies, search.currency)) throw Error('Invalid airline or currency');
   const url = new URL(`${providers[id].base}/BookingEngine/SearchResult`);
   const params = url.searchParams;
   params.set('OriginAirportCode', search.from);
   params.set('DestinationAirportCode', search.to);
-  params.set('OutboundDate', search.date);
+  params.set('OutboundDate', dateTime ? `${search.date}T12:00:00` : search.date);
   params.set('Currency', search.currency);
-  if (search.round && search.returnDate) params.set('InboundDate', search.returnDate);
+  if (search.round && search.returnDate) params.set('InboundDate', dateTime ? `${search.returnDate}T12:00:00` : search.returnDate);
   [['AD', search.passengers], ['CHD', 0], ['INF', 0]].forEach(([code, count], index) => {
     params.set(`TravelerTypes[${index}].Key`, String(code));
     params.set(`TravelerTypes[${index}].Value`, String(count));
   });
   return url.href;
+}
+
+export function currencyOrder(requested: Currency): Currency[] {
+  return [...new Set<Currency>([requested, 'SDG', 'USD'])];
+}
+
+export function sortOffers<T extends { flight: Flight }>(offers: T[], sort: string, requested: Currency): T[] {
+  const order = currencyOrder(requested);
+  return [...offers].sort((a, b) => sort === 'time' ? a.flight.departure.localeCompare(b.flight.departure) : order.indexOf(a.flight.currency) - order.indexOf(b.flight.currency) || a.flight.price - b.flight.price);
 }
 
 export function dateText(value: string | null) {

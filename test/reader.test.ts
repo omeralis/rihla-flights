@@ -12,6 +12,7 @@ interface Behavior { httpStatus?: number; navigationError?: Error; readinessErro
 
 class FakeBrowser {
   attempts: Record<string, number> = {};
+  requests: URL[] = [];
   contexts: { closed: boolean; settled: boolean }[] = [];
   closed = false;
   constructor(public behaviors: Record<string, Behavior[]> = {}, public failContext = false) {}
@@ -23,6 +24,7 @@ class FakeBrowser {
     return {
       newPage: async () => ({
         goto: async (url: string) => {
+          this.requests.push(new URL(url));
           const id = url.includes('badrairlines') ? 'badr' : url.includes('SudanAirways') ? 'sudanair' : 'tarco';
           const attempt = this.attempts[id] ?? 0; this.attempts[id] = attempt + 1;
           const choices = this.behaviors[id] ?? [{}]; behavior = choices[Math.min(attempt, choices.length - 1)];
@@ -79,7 +81,7 @@ test('one source timeout or context failure cannot discard other successful fare
 
 test('changed title, mismatched query and unreadable fares fail closed without retry', async t => {
   t.mock.method(console, 'warn', () => {});
-  for (const [behavior, reason] of [[{ title: 'Booking engine' }, 'unexpected_page'], [{ text: body.replace('21 October, 2026', '22 October, 2026') }, 'query_mismatch'], [{ text: 'PZU CAI 21 October, 2026 Travel time changed markup' }, 'parse_failed']] as const) {
+  for (const [behavior, reason] of [[{ title: 'Booking engine' }, 'unexpected_page'], [{ text: body.replace('21 October, 2026', '22 October, 2026') }, 'query_mismatch'], [{ text: body.replaceAll('$', 'EUR') }, 'parse_failed']] as const) {
     const browser = new FakeBrowser({ badr: [behavior] });
     const [result] = await read(browser, { ...search, airlines: ['badr'] });
     assert.equal(result.reason, reason); assert.deepEqual(result.flights, []); assert.equal(browser.attempts.badr, 1);
@@ -90,10 +92,62 @@ test('waits for asynchronous fares, reports unsupported currency and survives cl
   t.mock.method(console, 'warn', () => {});
   const browser = new FakeBrowser({ badr: [{ text: body.replaceAll('$', 'EUR'), settledText: body, cleanupError: Error(privateError) }] });
   assert.equal((await read(browser, { ...search, airlines: ['badr'] }))[0].status, 'ok');
-  const unsupported = new FakeBrowser({ badr: [{ text: 'The currency SAR is not valid' }] });
+  const unsupported = new FakeBrowser({ badr: ['SAR', 'SDG', 'USD'].map(currency => ({ text: `The currency ${currency} is not valid` })) });
   const [result] = await read(unsupported, { ...search, currency: 'SAR', airlines: ['badr'] });
   assert.equal(result.reason, 'unsupported_currency'); assert.equal(result.status, 'currency_unavailable');
-  assert.equal(unsupported.contexts[0].settled, false); assert.equal(unsupported.attempts.badr, 1);
+  assert.equal(unsupported.contexts[0].settled, false); assert.equal(unsupported.attempts.badr, 3);
+  assert.deepEqual(result.attemptedCurrencies, ['SAR', 'SDG', 'USD']);
+});
+
+test('each airline keeps its supported currency, falling back independently to SDG then USD', async t => {
+  t.mock.method(console, 'warn', () => {});
+  const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}.txt`, import.meta.url), 'utf8');
+  const browser = new FakeBrowser({
+    tarco: [{ text: 'The currency SAR is not valid' }, { text: 'The currency SDG is not valid' }, { text: body }],
+    badr: [{ text: 'The currency SAR is not valid' }, { text: fixture('badr-sdg') }],
+    sudanair: [{ text: fixture('sudanair-sar') }],
+  });
+  const results = await read(browser, { ...search, airlines: ['tarco', 'badr', 'sudanair'], currency: 'SAR' });
+  assert.deepEqual(results.map(source => source.status), ['ok', 'ok', 'ok']);
+  assert.deepEqual(results.map(source => source.currency), ['USD', 'SDG', 'SAR']);
+  assert.deepEqual(results.map(source => source.currencyFallback), [true, true, false]);
+  assert.deepEqual(results.map(source => source.flights[0].price), [270, 2565000, 1106.46]);
+  assert.ok(results.every(source => source.requestedCurrency === 'SAR'));
+  for (const source of results) {
+    assert.ok(source.flights.every(flight => flight.currency === source.currency));
+    assert.equal(new URL(source.bookingUrl).searchParams.get('Currency'), source.currency);
+  }
+  assert.deepEqual(browser.requests.filter(url => url.pathname.includes('tarcoair')).map(url => url.searchParams.get('Currency')), ['SAR', 'SDG', 'USD']);
+  assert.ok(browser.contexts.every(context => context.closed));
+});
+
+test('mismatched fare currency is requested again and failed fallback connections do not trigger other currencies', async t => {
+  t.mock.method(console, 'warn', () => {});
+  const browser = new FakeBrowser({ badr: [{ text: body }, { text: body }, { text: body }] });
+  const [result] = await read(browser, { ...search, currency: 'SAR', airlines: ['badr'] });
+  assert.equal(result.status, 'ok'); assert.equal(result.currency, 'USD'); assert.equal(result.flights[0].price, 270);
+  assert.deepEqual(result.attemptedCurrencies, ['SAR', 'SDG', 'USD']);
+  const down = new FakeBrowser({ badr: [{ text: 'The currency SAR is not valid' }, { navigationError: Error(privateError) }] });
+  const [failure] = await read(down, { ...search, currency: 'SAR', airlines: ['badr'] });
+  assert.equal(failure.status, 'unavailable'); assert.equal(failure.currency, 'SDG');
+  assert.deepEqual(failure.attemptedCurrencies, ['SAR', 'SDG']);
+});
+
+test('Tarco retries a different selected date using an explicit time and verifies the corrected header', async t => {
+  t.mock.method(console, 'warn', () => {});
+  const tarco = readFileSync(new URL('./fixtures/tarco-krt-sdg.txt', import.meta.url), 'utf8');
+  const criteria = { ...search, date: '2026-10-22', to: 'KRT' as const, currency: 'SDG' as const, airlines: ['tarco' as const] };
+  const browser = new FakeBrowser({ tarco: [{ text: tarco }, { text: tarco.replace('17 October, 2026', '22 October, 2026') }] });
+  const [result] = await read(browser, criteria);
+  assert.equal(result.status, 'ok'); assert.equal(result.observedDate, '2026-10-22');
+  assert.equal(result.dateCorrectionAttempted, true); assert.equal(result.queryMismatch, undefined);
+  assert.equal(result.flights[0].date, criteria.date);
+  assert.deepEqual(browser.requests.map(url => url.searchParams.get('OutboundDate')), ['2026-10-22', '2026-10-22T12:00:00']);
+  const mismatched = new FakeBrowser({ tarco: [{ text: `${tarco}\n22 October, 2026` }] });
+  const [rejected] = await read(mismatched, criteria);
+  assert.equal(rejected.status, 'unrecognized'); assert.equal(rejected.reason, 'query_mismatch');
+  assert.equal(rejected.queryMismatch, 'date'); assert.equal(rejected.observedDate, '2026-10-17');
+  assert.deepEqual(rejected.flights, []); assert.equal(mismatched.attempts.tarco, 2);
 });
 
 test('403 rotates browser-level proxies, keeps successful sources and never reuses a failed IP', async t => {

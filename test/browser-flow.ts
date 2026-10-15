@@ -29,15 +29,17 @@ try {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   let failed = false;
+  let fallbackToUSD = false;
   // Fixtures are intercepted only inside this test browser, never in the app.
   await page.route('**/api/search?**', async route => {
     if (failed) { await route.fulfill({ status: 503, json: { message: 'تعذّر تشغيل البحث لدى الشركات.' } }); return; }
     const search = validate(new URL(route.request().url()).searchParams);
     const sources = await Promise.all(search.airlines.map(async id => {
-      const suffix = search.currency === 'USD' ? '' : `-${search.currency.toLowerCase()}`;
+      const actual = id === 'badr' && search.currency === 'SAR' ? { ...search, currency: fallbackToUSD ? 'USD' as const : 'SDG' as const } : search;
+      const suffix = actual.currency === 'USD' ? '' : `-${actual.currency.toLowerCase()}`;
       const text = await readFile(new URL(`./fixtures/${id}${suffix}.txt`, import.meta.url), 'utf8');
-      const parsed = id === 'badr' && search.currency === 'SAR' ? { status: 'currency_unavailable', reason: 'unsupported_currency', flights: [] } : parseResults(text, search);
-      return { id, name: providers[id].name, bookingUrl: bookingUrl(id, search), ...parsed };
+      const parsed = parseResults(text, actual);
+      return { id, name: providers[id].name, bookingUrl: bookingUrl(id, actual), currency: actual.currency, requestedCurrency: search.currency, currencyFallback: actual.currency !== search.currency, ...parsed };
     }));
     await route.fulfill({ json: { search, sources, checkedAt: new Date().toISOString() } });
   });
@@ -61,11 +63,25 @@ try {
     await page.waitForFunction(() => !(document.querySelector('#currency-filter') as HTMLSelectElement).disabled);
     const prices = await page.locator('.price-box strong').allInnerTexts();
     assert.ok(prices.length > 0);
-    assert.ok(prices.every(price => price.includes(currency === 'SDG' ? 'ج.س' : currency === 'SAR' ? 'ر.س' : 'USD')));
+    if (currency === 'SAR') {
+      assert.match(await page.locator('[data-airline=badr] .price-box strong').innerText(), /ج.س/);
+      assert.match(await page.locator('[data-airline=sudanair] .price-box strong').innerText(), /ر.س/);
+      assert.match(await page.locator('[data-airline=badr] .currency-fallback').innerText(), /الجنيه السوداني.*الريال السعودي/);
+      assert.match(await page.locator('#source-status').innerText(), /عملات مختلفة/);
+      assert.deepEqual(await page.locator('.price-box').evaluateAll(boxes => boxes.map(box => box.closest('article')!.dataset.airline)), ['sudanair', 'badr']);
+      await page.screenshot({ path: 'test/artifacts/results-mixed-currencies.png', fullPage: true });
+    } else assert.ok(prices.every(price => price.includes(currency === 'SDG' ? 'ج.س' : 'USD')));
     assert.ok(page.url().includes(`currency=${currency}`));
-    for (const link of await page.locator('.official-link').evaluateAll(links => links.map(link => (link as HTMLAnchorElement).href))) assert.equal(new URL(link).searchParams.get('Currency'), currency);
-    if (currency === 'SAR') assert.match(await page.locator('[data-airline=badr] .source-body').innerText(), /لا تدعم/);
+    for (const link of await page.locator('.official-link').evaluateAll(links => links.map(link => ({ href: (link as HTMLAnchorElement).href, airline: link.closest('article')!.dataset.airline })))) assert.equal(new URL(link.href).searchParams.get('Currency'), currency === 'SAR' && link.airline === 'badr' ? 'SDG' : currency);
   }
+  fallbackToUSD = true;
+  await page.locator('#currency-filter').selectOption('SAR');
+  await page.waitForFunction(() => !(document.querySelector('#currency-filter') as HTMLSelectElement).disabled);
+  assert.match(await page.locator('[data-airline=badr] .price-box strong').innerText(), /USD/);
+  assert.match(await page.locator('[data-airline=badr] .currency-fallback').innerText(), /الدولار الأمريكي/);
+  assert.equal(new URL((await page.locator('[data-airline=badr] .official-link').getAttribute('href'))!).searchParams.get('Currency'), 'USD');
+  await page.locator('#currency-filter').selectOption('SDG');
+  await page.waitForFunction(() => !(document.querySelector('#currency-filter') as HTMLSelectElement).disabled);
   await page.locator('#sort').selectOption('time');
   for (const id of ['tarco', 'badr', 'sudanair']) await page.locator(`.air-filter[value=${id}]`).uncheck();
   assert.equal(await page.locator('.price-box').count(), 0);
