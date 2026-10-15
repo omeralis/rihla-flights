@@ -39,7 +39,8 @@ class FakeBrowser {
   }
   async close() { this.closed = true; }
 }
-const read = (browser: FakeBrowser, criteria = search, sourceTimeoutMs = 1000) => searchAirlines(criteria, { launch: async () => browser as unknown as Browser, retryDelayMs: 1, sourceTimeoutMs });
+const noRotation = { next: async () => undefined, fail: () => {}, succeed: () => {} };
+const read = (browser: FakeBrowser, criteria = search, sourceTimeoutMs = 1000) => searchAirlines(criteria, { launch: async () => browser as unknown as Browser, retryDelayMs: 1, sourceTimeoutMs, rotation: noRotation });
 
 test('401, 403, 429 are not retried and all contexts are closed', async t => {
   t.mock.method(console, 'warn', () => {});
@@ -93,4 +94,54 @@ test('waits for asynchronous fares, reports unsupported currency and survives cl
   const [result] = await read(unsupported, { ...search, currency: 'SAR', airlines: ['badr'] });
   assert.equal(result.reason, 'unsupported_currency'); assert.equal(result.status, 'currency_unavailable');
   assert.equal(unsupported.contexts[0].settled, false); assert.equal(unsupported.attempts.badr, 1);
+});
+
+test('403 rotates browser-level proxies, keeps successful sources and never reuses a failed IP', async t => {
+  t.mock.method(console, 'warn', () => {});
+  const direct = new FakeBrowser({ tarco: [{ httpStatus: 403 }] });
+  const first = new FakeBrowser({ tarco: [{ navigationError: Error(privateError) }] });
+  const second = new FakeBrowser();
+  const browsers = [direct, first, second];
+  const proxies = ['socks4://8.8.8.8:1080', 'socks4://1.1.1.1:1080'];
+  const launches: (string | undefined)[] = [];
+  const failures: string[] = [];
+  const successes: string[] = [];
+  const result = await searchAirlines(search, {
+    launch: async proxy => {
+      assert.ok(browsers.slice(0, launches.length).every(browser => browser.closed));
+      launches.push(proxy);
+      return browsers[launches.length - 1] as unknown as Browser;
+    },
+    sourceTimeoutMs: 1000, retryDelayMs: 1,
+    rotation: { next: async excluded => proxies.find(proxy => !excluded.has(proxy)), fail: proxy => { failures.push(proxy); }, succeed: proxy => { successes.push(proxy); } },
+  });
+  assert.deepEqual(launches, [undefined, ...proxies]);
+  assert.deepEqual(result.map(source => source.status), ['ok', 'ok']);
+  assert.equal(result[0].connection, 'proxy'); assert.equal(result[0].proxyAttempts, 2);
+  assert.equal(result[1].connection, 'direct');
+  assert.deepEqual(direct.attempts, { tarco: 1, badr: 1 });
+  assert.equal(first.attempts.badr, undefined); assert.equal(second.attempts.badr, undefined);
+  assert.deepEqual(failures, [proxies[0]]); assert.deepEqual(successes, [proxies[1]]);
+  assert.doesNotMatch(JSON.stringify(result), /socks4|private-cookie|private-session/);
+});
+
+test('authentication, rate limits, unsupported currency, empty results and query mismatches do not rotate', async t => {
+  t.mock.method(console, 'warn', () => {});
+  for (const behavior of [{ httpStatus: 401 }, { httpStatus: 429 }, { text: 'The currency USD is not valid' }, { text: 'PZU CAI 21 October, 2026\nNo results' }, { text: body.replace('21 October, 2026', '22 October, 2026') }]) {
+    let rotations = 0;
+    const browser = new FakeBrowser({ badr: [behavior] });
+    await searchAirlines({ ...search, airlines: ['badr'] }, { launch: async () => browser as unknown as Browser, rotation: { ...noRotation, next: async () => { rotations++; return undefined; } } });
+    assert.equal(rotations, 0);
+  }
+});
+
+test('unavailable list preserves original source failure and proxy launch failures remain bounded', async t => {
+  t.mock.method(console, 'warn', () => {});
+  const browser = new FakeBrowser({ badr: [{ httpStatus: 403 }] });
+  const [original] = await searchAirlines({ ...search, airlines: ['badr'] }, { launch: async () => browser as unknown as Browser, rotation: { ...noRotation, next: async () => { throw Error(privateError); } } });
+  assert.equal(original.status, 'blocked'); assert.equal(original.httpStatus, 403);
+  let launches = 0;
+  let failures = 0;
+  await searchAirlines({ ...search, airlines: ['badr'] }, { launch: async proxy => { launches++; if (proxy) throw Error(privateError); return new FakeBrowser({ badr: [{ httpStatus: 403 }] }) as unknown as Browser; }, rotation: { ...noRotation, next: async excluded => ['socks4://8.8.8.8:1080', 'socks4://1.1.1.1:1080'].find(proxy => !excluded.has(proxy)), fail: () => { failures++; } } });
+  assert.equal(launches, 3); assert.equal(failures, 2);
 });

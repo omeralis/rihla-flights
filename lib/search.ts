@@ -48,6 +48,8 @@ export interface SourceResult {
   stage?: string;
   httpStatus?: number;
   errorClass?: string;
+  connection?: 'direct' | 'proxy';
+  proxyAttempts?: number;
 }
 export interface SearchResponse { search: SearchCriteria; sources: SourceResult[]; checkedAt: string }
 

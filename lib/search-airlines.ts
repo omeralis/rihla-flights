@@ -1,6 +1,7 @@
 import type { Browser, BrowserContext } from 'playwright-core';
 import { bookingUrl, providers, type Airline, type SearchCriteria, type SourceResult } from './search';
 import { parseResults } from './parse-results';
+import { rotateProxy, type ProxyRotation } from './rotate-proxy';
 
 class SourceTimeout extends Error { override name = 'TimeoutError'; }
 const errorClass = (error: unknown) => (error instanceof Error ? error.name : 'Error').replace(/[^A-Za-z0-9_]/g, '').slice(0, 80);
@@ -17,27 +18,63 @@ async function cleanup(resource: { close(): Promise<void> } | undefined) {
   catch (error) { console.warn('Browser cleanup failed', { errorClass: errorClass(error) }); }
 }
 
-async function launchBrowser(): Promise<Browser> {
+async function launchBrowser(proxy?: string): Promise<Browser> {
   process.env.CLOAKBROWSER_AUTO_UPDATE ??= 'false';
   process.env.CLOAKBROWSER_VERSION ??= '146.0.7680.177.5';
   const { launch } = await import('cloakbrowser');
-  return launch({ headless: true });
+  return launch({ headless: true, ...(proxy ? { proxy: { server: proxy } } : {}) });
 }
 
 interface ReaderOptions {
-  launch?: () => Promise<Browser>;
+  launch?: (proxy?: string) => Promise<Browser>;
   sourceTimeoutMs?: number;
   retryDelayMs?: number;
+  rotation?: ProxyRotation;
 }
 
 export async function searchAirlines(search: SearchCriteria, options: ReaderOptions = {}): Promise<SourceResult[]> {
+  const deadline = Date.now() + 80_000;
+  const rotation = options.rotation ?? rotateProxy;
+  const results = new Map<Airline, SourceResult>();
+  const used = new Set<string>();
+
+  const canRotate = (result: SourceResult) => (result.status === 'blocked' && result.httpStatus === 403) || (result.status === 'unavailable' && ['network_error', 'navigation_timeout', 'result_timeout', 'source_timeout'].includes(result.reason ?? ''));
+
+  // Close each browser before changing IP; keep successful sources from earlier rounds.
+  for (let round = 0; round < 3; round++) {
+    const pending = round === 0 ? search.airlines : search.airlines.filter(id => canRotate(results.get(id)!));
+    if (!pending.length || deadline - Date.now() < 3_000) break;
+    let proxy: string | undefined;
+    if (round > 0) {
+      try { proxy = await timeout(rotation.next(used), Math.min(4_500, deadline - Date.now())); }
+      catch { break; }
+      if (!proxy) break;
+      used.add(proxy);
+    }
+    try {
+      const sources = await searchRound({ ...search, airlines: pending }, options, proxy, Math.min(round === 0 ? 35_000 : 12_000, Math.max(1, deadline - Date.now() - 9_000)), Math.min(round === 0 ? 10_000 : 5_000, Math.max(1, deadline - Date.now() - 4_000)));
+      for (const source of sources) results.set(source.id, { ...source, connection: proxy ? 'proxy' : 'direct', proxyAttempts: round });
+      if (proxy) {
+        if (sources.some(source => ['ok', 'no_results', 'currency_unavailable'].includes(source.status))) rotation.succeed(proxy);
+        else rotation.fail(proxy);
+      }
+    } catch (error) {
+      if (!proxy) throw error;
+      rotation.fail(proxy);
+      console.warn('Proxy browser unavailable', { errorClass: errorClass(error) });
+    }
+  }
+  return search.airlines.map(id => results.get(id)!);
+}
+
+async function searchRound(search: SearchCriteria, options: ReaderOptions, proxy: string | undefined, sourceTimeoutMs: number, launchTimeoutMs: number): Promise<SourceResult[]> {
   let abandoned = false;
-  const launching = (options.launch ?? launchBrowser)().then(async browser => {
+  const launching = (options.launch ?? launchBrowser)(proxy).then(async browser => {
     if (abandoned) { await cleanup(browser); throw new SourceTimeout(); }
     return browser;
   });
   let browser: Browser;
-  try { browser = await timeout(launching, 10_000); }
+  try { browser = await timeout(launching, launchTimeoutMs); }
   catch (error) { abandoned = true; throw error; }
 
   async function read(id: Airline): Promise<SourceResult> {
@@ -45,7 +82,7 @@ export async function searchAirlines(search: SearchCriteria, options: ReaderOpti
     let stage = 'context';
     let context: BrowserContext | undefined;
     let expired = false;
-    const deadline = Date.now() + (options.sourceTimeoutMs ?? 65_000);
+    const deadline = Date.now() + Math.min(options.sourceTimeoutMs ?? sourceTimeoutMs, sourceTimeoutMs);
     const remaining = (limit: number) => Math.max(1, Math.min(limit, deadline - Date.now()));
     const failure = (reason: string, status: SourceResult['status'] = 'unavailable', httpStatus?: number, error?: unknown) => {
       Object.assign(result, { status, reason, stage, flights: [] });
